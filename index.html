@@ -1,0 +1,2151 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light" data-color="sage">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#f7f9f3">
+  <meta name="description" content="一个简洁的 Unix 时间戳转换工具。支持秒、毫秒、微秒、纳秒，本地时间与 UTC，以及个性化 Material You 主题。所有计算均在浏览器中完成。">
+  <title>晓刻 · Unix 时间戳转换器</title>
+  <script>
+    (() => {
+      try {
+        const mode = localStorage.getItem('shike-mode') || 'light';
+        const color = localStorage.getItem('shike-color') || 'sage';
+        document.documentElement.dataset.theme = mode === 'system'
+          ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+          : (mode === 'dark' ? 'dark' : 'light');
+        if (['sage', 'iris', 'blue', 'apricot', 'rose'].includes(color)) {
+          document.documentElement.dataset.color = color;
+        }
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;600&display=swap" media="print" onload="this.media='all'">
+  <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;600&display=swap"></noscript>
+  <style>
+    :root {
+      color-scheme: light;
+      --primary: #49673e;
+      --on-primary: #ffffff;
+      --primary-container: #e4eddb;
+      --on-primary-container: #2b4523;
+      --surface: #f8faf5;
+      --surface-container: #eff3e9;
+      --surface-high: #e8ede2;
+      --card: #ffffff;
+      --text: #242a22;
+      --muted: #777e72;
+      --secondary-text: #596252;
+      --outline: #dfe5d9;
+      --outline-strong: #bbc6b2;
+      --error: #b33b38;
+      --shadow: 0 12px 40px #26351e12, 0 2px 8px #26351e08;
+      --sans: 'DM Sans', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --mono: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+      font-family: var(--sans);
+      font-synthesis: none;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+
+    :root[data-color="iris"] {
+      --primary: #6a588d;
+      --primary-container: #ebe3f6;
+      --on-primary-container: #493665;
+      --surface: #faf8fc;
+      --surface-container: #f1edf5;
+      --surface-high: #eae5f0;
+      --outline: #e4dfe9;
+      --outline-strong: #c9bed5;
+      --secondary-text: #665c70;
+    }
+
+    :root[data-color="blue"] {
+      --primary: #3e687a;
+      --primary-container: #dfeef3;
+      --on-primary-container: #284c5b;
+      --surface: #f6fafb;
+      --surface-container: #eaf2f5;
+      --surface-high: #e0ebef;
+      --outline: #dce6ea;
+      --outline-strong: #b6cbd3;
+      --secondary-text: #536c76;
+    }
+
+    :root[data-color="apricot"] {
+      --primary: #8a5d36;
+      --primary-container: #f5e5d5;
+      --on-primary-container: #684121;
+      --surface: #fcf9f5;
+      --surface-container: #f6eee5;
+      --surface-high: #eee4d8;
+      --outline: #e9e0d5;
+      --outline-strong: #d4c1ac;
+      --secondary-text: #7b6855;
+    }
+
+    :root[data-color="rose"] {
+      --primary: #8c5869;
+      --primary-container: #f4e2e8;
+      --on-primary-container: #693b4b;
+      --surface: #fcf8f9;
+      --surface-container: #f5ecef;
+      --surface-high: #eee2e7;
+      --outline: #e9dfe3;
+      --outline-strong: #d5bdc5;
+      --secondary-text: #7d606b;
+    }
+
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+      --primary: #b7cea5;
+      --on-primary: #203519;
+      --primary-container: #303e29;
+      --on-primary-container: #d4e5c5;
+      --surface: #161a15;
+      --surface-container: #20261d;
+      --surface-high: #2b3227;
+      --card: #1d221b;
+      --text: #e4e8df;
+      --muted: #99a28f;
+      --secondary-text: #b8c2ae;
+      --outline: #353e2f;
+      --outline-strong: #5a6950;
+      --error: #ffb4ab;
+      --shadow: 0 12px 40px #00000036, 0 2px 8px #00000026;
+    }
+
+    :root[data-theme="dark"][data-color="iris"] {
+      --primary: #d0bce9;
+      --on-primary: #38234f;
+      --primary-container: #3d324d;
+      --on-primary-container: #e6d7f6;
+      --surface: #1b181e;
+      --surface-container: #25212b;
+      --surface-high: #302a38;
+      --card: #221e27;
+      --outline: #403747;
+      --outline-strong: #6b5c79;
+      --secondary-text: #c6b9d1;
+    }
+
+    :root[data-theme="dark"][data-color="blue"] {
+      --primary: #a7cddd;
+      --on-primary: #153541;
+      --primary-container: #253c46;
+      --on-primary-container: #cbe5ef;
+      --surface: #151b1e;
+      --surface-container: #1d282d;
+      --surface-high: #29353b;
+      --card: #1b2428;
+      --outline: #30414a;
+      --outline-strong: #506d7b;
+      --secondary-text: #aec6d1;
+    }
+
+    :root[data-theme="dark"][data-color="apricot"] {
+      --primary: #e6bd95;
+      --on-primary: #442a12;
+      --primary-container: #493728;
+      --on-primary-container: #f2d9c0;
+      --surface: #1e1a16;
+      --surface-container: #2b241d;
+      --surface-high: #393025;
+      --card: #27211b;
+      --outline: #473b2d;
+      --outline-strong: #7b644c;
+      --secondary-text: #d1bfac;
+    }
+
+    :root[data-theme="dark"][data-color="rose"] {
+      --primary: #e4b5c6;
+      --on-primary: #482433;
+      --primary-container: #49303a;
+      --on-primary-container: #f3d3df;
+      --surface: #1e181b;
+      --surface-container: #2b2026;
+      --surface-high: #392a32;
+      --card: #271d22;
+      --outline: #48343e;
+      --outline-strong: #7c5868;
+      --secondary-text: #d3b8c3;
+    }
+
+    * { box-sizing: border-box; margin: 0; }
+    html { scroll-behavior: smooth; scroll-padding-top: 28px; }
+    body {
+      margin: 0;
+      background: var(--surface);
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.6;
+      font-family: var(--sans);
+    }
+    button, input, select { font: inherit; }
+    button { cursor: pointer; border: 0; background: transparent; -webkit-tap-highlight-color: transparent; }
+    button:focus-visible, a:focus-visible, select:focus-visible, summary:focus-visible {
+      outline: 3px solid var(--primary);
+      outline-offset: 4px;
+    }
+    button:disabled { cursor: default; opacity: 0.45; }
+    [hidden] { display: none !important; }
+    ::selection { background: var(--primary-container); color: var(--on-primary-container); }
+
+    .icon {
+      display: block;
+      width: 20px;
+      height: 20px;
+      flex-shrink: 0;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.7;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+
+    .shell { width: min(1168px, 100% - 80px); margin-inline: auto; }
+
+    /* Header */
+    .site-header { border-bottom: 1px solid var(--outline); }
+    .header-inner { height: 80px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+    .brand { display: inline-flex; align-items: center; gap: 12px; text-decoration: none; color: var(--text); border-radius: 10px; }
+    .brand-mark { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 14px; background: var(--primary); color: var(--on-primary); }
+    .brand-mark .icon { width: 25px; height: 25px; stroke-width: 1.65; }
+    .brand-name { font-size: 22px; line-height: 1.2; font-weight: 600; letter-spacing: 2px; }
+    .brand-caption { display: block; margin-top: 5px; color: var(--muted); font-size: 9px; line-height: 1; font-weight: 500; letter-spacing: 1.8px; }
+    .header-actions { position: relative; display: flex; gap: 10px; align-items: center; }
+    .guide-button { display: inline-flex; align-items: center; gap: 7px; padding: 10px 13px; border-radius: 24px; color: var(--secondary-text); font-size: 13px; }
+    .guide-button .icon { width: 17px; height: 17px; }
+    .guide-button:hover { background: var(--surface-container); }
+    .header-divider { height: 22px; width: 1px; background: var(--outline); margin: 0 5px; }
+    .icon-button { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; color: var(--secondary-text); flex-shrink: 0; }
+    .icon-button:hover { background: var(--surface-high); color: var(--primary); }
+    .theme-toggle .icon { transition: transform .35s ease; }
+    .theme-toggle:hover .icon { transform: rotate(-18deg); }
+    .palette-button { display: flex; align-items: center; gap: 8px; border-radius: 24px; padding: 10px 16px; background: var(--primary-container); color: var(--on-primary-container); font-size: 13px; font-weight: 500; }
+    .palette-button .icon { width: 18px; height: 18px; }
+    .palette-button:hover { filter: brightness(0.97); }
+
+    .settings-panel {
+      position: absolute;
+      z-index: 30;
+      right: 0;
+      top: 57px;
+      width: 332px;
+      padding: 22px;
+      background: var(--card);
+      border: 1px solid var(--outline);
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+      transform-origin: top right;
+      animation: menu-in 0.2s ease backwards;
+      contain: content;
+    }
+    .settings-panel.is-closing {
+      animation: menu-out 0.18s ease both;
+    }
+    .settings-title { font-size: 16px; font-weight: 600; margin: 0 0 3px; }
+    .settings-description { font-size: 12px; color: var(--muted); margin: 0; }
+    .color-options { display: grid; grid-template-columns: repeat(5, 1fr); gap: 9px; margin-top: 21px; }
+    .color-choice {
+      display: flex;
+      align-items: center;
+      flex-direction: column;
+      gap: 9px;
+      padding: 3px 0;
+      border-radius: 12px;
+      color: var(--secondary-text);
+      font-size: 10px;
+      white-space: nowrap;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+    }
+    .color-dot {
+      width: 35px;
+      height: 35px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      color: #ffffff;
+      position: relative;
+      transition: transform 0.2s;
+    }
+    .color-dot::after {
+      position: absolute;
+      content: '';
+      inset: -4px;
+      border: 1.5px solid transparent;
+      border-radius: 50%;
+      pointer-events: none;
+    }
+    .color-choice[aria-pressed="true"] .color-dot::after { border-color: var(--primary); }
+    .color-choice .icon { width: 17px; height: 17px; opacity: 0; }
+    .color-choice[aria-pressed="true"] .icon { opacity: 1; }
+    .color-choice:hover .color-dot { transform: scale(1.08); }
+    .mode-label { font-size: 11px; color: var(--muted); margin: 24px 0 9px; }
+    .mode-options { display: flex; background: var(--surface-container); padding: 4px; border-radius: 14px; gap: 3px; }
+    .mode-choice { flex: 1; border-radius: 10px; padding: 9px 2px; background: transparent; color: var(--secondary-text); font-size: 12px; }
+    .mode-choice[aria-pressed="true"] { background: var(--card); color: var(--primary); box-shadow: 0 1px 4px #00000009; font-weight: 500; }
+
+    /* Main */
+    main { padding-top: 32px; }
+    .intro { animation: rise-in 0.6s 0.02s backwards; }
+    .eyebrow { margin: 0 0 7px; color: var(--primary); font-size: 10px; font-weight: 600; letter-spacing: 2.2px; line-height: 1.5; }
+    h1 { margin: 0; font-size: clamp(27px, 3vw, 36px); line-height: 1.4; font-weight: 600; letter-spacing: -0.9px; }
+    .intro-description { margin: 8px 0 22px; color: var(--muted); font-size: 14px; letter-spacing: 0.2px; }
+
+    /* Live panel */
+    .live-panel {
+      background: var(--primary-container);
+      color: var(--on-primary-container);
+      border-radius: 26px;
+      padding: 22px 28px;
+      position: relative;
+      animation: rise-in 0.6s 0.09s backwards;
+      contain: content;
+    }
+    .live-top { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+    .live-heading { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 500; letter-spacing: 0.2px; }
+    /* 呼吸光点 */
+    .live-dot {
+      position: relative;
+      width: 6px;
+      height: 6px;
+    }
+    .live-dot::before,
+    .live-dot::after {
+      content: '';
+      position: absolute;
+      border-radius: 50%;
+    }
+    .live-dot::after { inset: 0; background: var(--primary); }
+    .live-dot::before {
+      inset: -4px;
+      background: color-mix(in srgb, var(--primary) 12%, transparent);
+      opacity: 0;
+      transform: scale(0.4286);
+      animation: breathe 2.5s infinite;
+    }
+    .live-panel[data-paused="true"] .live-dot { opacity: 0.4; }
+    .live-panel[data-paused="true"] .live-dot::before { animation: none; }
+    .live-status { font-size: 10px; opacity: 0.55; margin-left: 3px; font-weight: 400; }
+
+    .segmented {
+      display: inline-flex;
+      padding: 3px;
+      border: 1px solid var(--outline-strong);
+      border-radius: 12px;
+      gap: 2px;
+      background: transparent;
+    }
+    .segmented button {
+      padding: 5px 13px;
+      border-radius: 8px;
+      background: transparent;
+      color: inherit;
+      font-size: 12px;
+      line-height: 1.6;
+      white-space: nowrap;
+    }
+    .segmented button[aria-pressed="true"] {
+      background: var(--card);
+      color: var(--primary);
+      box-shadow: 0 1px 4px #1d2c1710;
+      font-weight: 500;
+    }
+
+    /* 分段控件滑动指示器：JS 写入 --seg-x/y/w/h，色块平滑滑动到选中项 */
+    .seg { position: relative; isolation: isolate; }
+    .seg > button { transition: color 0.25s ease; }
+    .seg::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      z-index: -1;
+      width: var(--seg-w, 0px);
+      height: var(--seg-h, 0px);
+      transform: translate3d(var(--seg-x, 0px), var(--seg-y, 0px), 0);
+      border-radius: 8px;
+      background: var(--card);
+      box-shadow: 0 1px 4px #1d2c1710;
+      opacity: 0;
+      pointer-events: none;
+    }
+    .seg.seg-ready::before { opacity: 1; }
+    .seg.seg-animate::before {
+      transition: transform 0.34s cubic-bezier(0.2, 0, 0, 1), width 0.34s cubic-bezier(0.2, 0, 0, 1), height 0.34s cubic-bezier(0.2, 0, 0, 1), background-color 0.4s ease;
+    }
+    .seg.seg-ready > button[aria-pressed="true"],
+    .seg.seg-ready > button[aria-selected="true"] { background: transparent; box-shadow: none; }
+    .timezone-selector.seg::before { background: var(--primary-container); box-shadow: none; border-radius: 7px; }
+    .result-tabs.seg::before { box-shadow: 0 1px 5px #00000010; }
+    .mode-options.seg::before { border-radius: 10px; box-shadow: 0 1px 4px #00000012; }
+
+    .live-units { border: 0; background: color-mix(in srgb, var(--on-primary-container) 7%, transparent); }
+    .live-main { display: flex; justify-content: space-between; align-items: center; gap: 24px; margin-top: 6px; }
+    .live-number {
+      font-family: var(--mono);
+      font-size: clamp(39px, 4.5vw, 59px);
+      line-height: 1.25;
+      font-weight: 500;
+      letter-spacing: -2.6px;
+      font-variant-numeric: tabular-nums;
+    }
+    .live-number.is-milliseconds { font-size: clamp(31px, 4vw, 53px); letter-spacing: -2.5px; }
+    .live-date { font-size: 12px; margin: 5px 0 0; color: var(--secondary-text); font-variant-numeric: tabular-nums; letter-spacing: 0.1px; }
+    .live-actions { display: flex; gap: 10px; align-items: center; padding-top: 8px; }
+    .copy-live {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      height: 42px;
+      padding: 0 20px;
+      border-radius: 24px;
+      background: var(--card);
+      color: var(--on-primary-container);
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .copy-live .icon { width: 16px; height: 16px; }
+    .copy-live:hover { box-shadow: 0 3px 10px #24361d0a; }
+    .pause-button {
+      width: 42px;
+      height: 42px;
+      border: 1px solid color-mix(in srgb, var(--on-primary-container) 22%, transparent);
+      color: var(--on-primary-container);
+    }
+    .pause-button:hover { background: color-mix(in srgb, var(--on-primary-container) 8%, transparent); }
+
+    /* Tools */
+    .tool-grid { margin-top: 22px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; animation: rise-in 0.6s 0.16s backwards; }
+    .tool-card {
+      min-width: 0;
+      background: var(--card);
+      border: 1px solid var(--outline);
+      border-radius: 24px;
+      padding: 24px;
+      contain: content;
+    }
+    .tool-heading { display: flex; align-items: center; gap: 12px; margin-bottom: 21px; }
+    .tool-icon {
+      width: 39px;
+      height: 39px;
+      background: var(--surface-container);
+      color: var(--primary);
+      border-radius: 13px;
+      display: grid;
+      place-items: center;
+      flex-shrink: 0;
+    }
+    .tool-icon .icon { width: 20px; height: 20px; }
+    .tool-heading h2 { font-size: 17px; line-height: 1.5; font-weight: 600; margin: 0; letter-spacing: -0.2px; }
+    .tool-heading p { color: var(--muted); font-size: 12px; margin: 3px 0 0; }
+
+    .field {
+      position: relative;
+      display: block;
+      min-width: 0;
+      border: 1px solid var(--outline-strong);
+      border-radius: 13px;
+      background: var(--card);
+      height: 64px;
+    }
+    .field:focus-within { border-color: var(--primary); box-shadow: inset 0 0 0 1px var(--primary); }
+    .field.is-invalid { border-color: var(--error); }
+    .field.is-invalid:focus-within { box-shadow: inset 0 0 0 1px var(--error); }
+    .field-label {
+      position: absolute;
+      top: 8px;
+      left: 15px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.5;
+      pointer-events: none;
+    }
+    .field:focus-within .field-label { color: var(--primary); }
+    .field.is-invalid .field-label { color: var(--error); }
+    .field input {
+      display: block;
+      width: 100%;
+      height: 100%;
+      padding: 25px 15px 9px;
+      border: 0;
+      border-radius: inherit;
+      background: transparent;
+      color: var(--text);
+      line-height: 1.5;
+      min-width: 0;
+    }
+    .field input::placeholder { color: var(--muted); opacity: 0.7; }
+    .timestamp-field input { padding-right: 48px; font-family: var(--mono); font-size: 19px; font-weight: 400; letter-spacing: 0.3px; }
+    .clear-input {
+      position: absolute;
+      right: 9px;
+      top: 16px;
+      width: 30px;
+      height: 30px;
+      color: var(--muted);
+    }
+    .clear-input .icon { width: 16px; height: 16px; }
+
+    .form-option-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 17px; height: 37px; }
+    .option-label { color: var(--secondary-text); font-size: 12px; }
+    .select-wrap { position: relative; }
+    .select-wrap select {
+      appearance: none;
+      color: var(--secondary-text);
+      background: var(--surface-container);
+      border: 0;
+      border-radius: 10px;
+      min-width: 132px;
+      padding: 9px 33px 9px 13px;
+      font-size: 12px;
+      line-height: 1.6;
+      cursor: pointer;
+    }
+    .select-wrap .icon {
+      position: absolute;
+      right: 11px;
+      top: 11px;
+      width: 14px;
+      height: 14px;
+      color: var(--secondary-text);
+      pointer-events: none;
+    }
+    .text-button {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 7px 0 7px 8px;
+      background: transparent;
+      color: var(--primary);
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .text-button:hover { color: var(--on-primary-container); }
+    .text-button .icon { width: 13px; height: 13px; }
+    .unit-option { display: flex; align-items: center; gap: 12px; }
+    .field-message {
+      color: var(--muted);
+      font-size: 11px;
+      min-height: 19px;
+      line-height: 1.7;
+      margin: 11px 0 16px;
+    }
+    .field-message.is-error { color: var(--error); }
+
+    .primary-button {
+      width: 100%;
+      min-height: 43px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      background: var(--primary);
+      color: var(--on-primary);
+      border-radius: 23px;
+      padding: 11px 20px;
+      font-size: 13px;
+      font-weight: 500;
+      letter-spacing: 0.2px;
+    }
+    .primary-button .icon { width: 17px; height: 17px; transition: transform 0.2s; }
+    .primary-button:hover { filter: brightness(1.07); box-shadow: 0 3px 8px #1b2d1614; }
+    .primary-button:hover .icon { transform: translateX(3px); }
+
+    .date-fields { display: grid; grid-template-columns: 1.14fr 1fr; gap: 12px; }
+    .date-fields input { font-family: var(--sans); font-size: 13px; letter-spacing: 0.1px; padding-right: 14px; }
+    .date-fields input::-webkit-calendar-picker-indicator {
+      width: 15px;
+      height: 15px;
+      padding: 4px;
+      margin: 0 0 0 6px;
+      border-radius: 7px;
+      opacity: 0.5;
+      cursor: pointer;
+      transition: background-color 0.2s ease, opacity 0.2s ease;
+    }
+    .date-fields input::-webkit-calendar-picker-indicator:hover { opacity: 0.85; background-color: var(--surface-container); }
+    .timezone-selector {
+      border-color: var(--outline);
+      padding: 3px;
+      border-radius: 11px;
+      color: var(--secondary-text);
+    }
+    .timezone-selector button {
+      padding: 5px 13px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      border-radius: 7px;
+      font-size: 12px;
+    }
+    .timezone-selector button .icon { width: 13px; height: 13px; }
+    .timezone-selector button[aria-pressed="true"] { background: var(--primary-container); box-shadow: none; }
+
+    /* Results */
+    .results-section { margin-top: 32px; animation: rise-in 0.6s 0.23s backwards; }
+    .results-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 15px; }
+    .result-title-row { display: flex; gap: 12px; align-items: center; }
+    .results-heading h2 { font-size: 19px; font-weight: 600; margin: 0; }
+    .result-source { color: var(--muted); font-size: 11px; margin: 4px 0 0; min-height: 17px; }
+    .results-controls { display: flex; align-items: center; gap: 15px; }
+    .result-tabs {
+      display: inline-flex;
+      background: var(--surface-container);
+      padding: 4px;
+      border-radius: 12px;
+      gap: 2px;
+    }
+    .result-tab {
+      padding: 6px 14px;
+      border-radius: 8px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .result-tab[aria-selected="true"] {
+      background: var(--card);
+      color: var(--primary);
+      box-shadow: 0 1px 5px #00000006;
+      font-weight: 500;
+    }
+    .copy-all { gap: 6px; font-size: 11px; padding: 6px 0; }
+    .copy-all .icon { width: 14px; height: 14px; }
+
+    .results-table-wrap {
+      background: var(--card);
+      border: 1px solid var(--outline);
+      border-radius: 20px;
+      overflow: hidden;
+      contain: content;
+    }
+    #results-panel:focus-visible {
+      outline: 2px solid var(--primary);
+      outline-offset: 4px;
+      border-radius: 20px;
+    }
+    .results-table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      table-layout: fixed;
+    }
+    .results-table thead { background: var(--surface-container); color: var(--muted); }
+    .results-table th {
+      padding: 12px 23px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .results-table th:first-child { width: 23%; }
+    .results-table th:last-child { width: 66px; }
+    .results-table td {
+      border-top: 1px solid var(--outline);
+      padding: 12px 23px;
+      height: 55px;
+      vertical-align: middle;
+    }
+    .results-table tbody tr:first-child td { border-top: 0; }
+    .results-table td:first-child { color: var(--secondary-text); font-size: 12px; }
+    .format-note {
+      color: var(--muted);
+      font-size: 9px;
+      margin-left: 8px;
+      font-family: var(--mono);
+    }
+    .result-value {
+      font-family: var(--mono);
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 400;
+      word-break: break-word;
+      line-height: 1.8;
+      font-variant-numeric: tabular-nums;
+    }
+    .results-table td:last-child { padding: 8px 17px 8px 0; text-align: right; }
+    .row-copy {
+      width: 31px;
+      height: 31px;
+      margin-left: auto;
+      color: var(--muted);
+    }
+    .row-copy .icon { width: 15px; height: 15px; }
+    .row-copy.is-copied { color: var(--primary); background: var(--primary-container); }
+
+    .result-footnote {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin: 11px 0 0 2px;
+      color: var(--muted);
+      font-size: 10px;
+    }
+    .result-footnote .icon { width: 12px; height: 12px; }
+
+    /* Footer */
+    .site-footer {
+      margin-top: 34px;
+      padding: 23px 0 26px;
+      border-top: 1px solid var(--outline);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      font-size: 10px;
+      color: var(--muted);
+    }
+    .footer-brand { display: inline-flex; gap: 8px; align-items: center; }
+    .footer-brand .icon { width: 14px; height: 14px; color: var(--primary); }
+    .footer-right { display: flex; gap: 16px; align-items: center; }
+    .privacy-label { display: inline-flex; align-items: center; gap: 5px; }
+    .privacy-label .icon { width: 12px; height: 12px; }
+    .footer-link { border: 0; background: transparent; padding: 0; font-size: inherit; color: var(--muted); }
+    .footer-link:hover { color: var(--primary); }
+
+    /* Dialog */
+    dialog {
+      width: min(480px, calc(100% - 32px));
+      max-height: 85dvh;
+      margin: auto;
+      padding: 30px;
+      background: var(--card);
+      color: var(--text);
+      border: 1px solid var(--outline);
+      border-radius: 28px;
+      box-shadow: var(--shadow);
+      contain: content;
+    }
+    dialog::backdrop { background: #10200c60; backdrop-filter: blur(5px); animation: backdrop-in 0.25s ease backwards; }
+    dialog[open] { animation: dialog-in 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.05) backwards; }
+    dialog.is-closing { animation: dialog-out 0.2s ease both; }
+    dialog.is-closing::backdrop { animation: backdrop-out 0.2s ease both; }
+    .dialog-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 22px; }
+    .dialog-heading h2 { font-size: 21px; font-weight: 600; margin: 0; }
+    .dialog-heading .icon-button { margin: -8px -8px -8px 0; }
+    .guide-section + .guide-section { margin-top: 23px; }
+    .guide-section h3 { margin: 0 0 6px; font-weight: 600; font-size: 13px; }
+    .guide-section p { margin: 0; color: var(--secondary-text); font-size: 12px; line-height: 1.9; }
+    .unit-guide {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .unit-guide div {
+      padding: 8px 11px;
+      border-radius: 8px;
+      font-size: 11px;
+      background: var(--surface-container);
+      color: var(--secondary-text);
+    }
+    .unit-guide code {
+      font-family: var(--mono);
+      color: var(--primary);
+      margin-right: 8px;
+    }
+    .dialog-done { margin-top: 28px; }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      z-index: 100;
+      bottom: 28px;
+      left: 50%;
+      transform: translate(-50%, 16px);
+      opacity: 0;
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      background: var(--text);
+      color: var(--card);
+      padding: 12px 19px;
+      border-radius: 14px;
+      font-size: 12px;
+      box-shadow: var(--shadow);
+      transition: transform 0.25s ease, opacity 0.25s ease;
+      max-width: calc(100% - 32px);
+      white-space: nowrap;
+      contain: content;
+    }
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+    .toast .icon { width: 16px; height: 16px; }
+
+    /* Misc */
+    .skip-link {
+      position: fixed;
+      z-index: 200;
+      left: 16px;
+      top: -70px;
+      background: var(--primary);
+      color: var(--on-primary);
+      border-radius: 12px;
+      padding: 12px 18px;
+      text-decoration: none;
+    }
+    .skip-link:focus { top: 12px; }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      padding: 0;
+      border: 0;
+      clip: rect(0, 0, 0, 0);
+      overflow: hidden;
+      white-space: nowrap;
+    }
+
+    @keyframes rise-in {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes menu-in {
+      from { opacity: 0; transform: translateY(-5px) scale(0.97); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    @keyframes menu-out {
+      from { opacity: 1; transform: translateY(0) scale(1); }
+      to { opacity: 0; transform: translateY(-5px) scale(0.97); }
+    }
+    @keyframes dialog-in {
+      from { opacity: 0; transform: translateY(16px) scale(0.96); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    @keyframes dialog-out {
+      from { opacity: 1; transform: translateY(0) scale(1); }
+      to { opacity: 0; transform: translateY(10px) scale(0.97); }
+    }
+    @keyframes backdrop-in {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    @keyframes backdrop-out {
+      from { opacity: 1; }
+      to { opacity: 0; }
+    }
+    @keyframes breathe {
+      0%, 100% { transform: scale(0.4286); opacity: 1; }
+      50% { transform: scale(1); opacity: 0.6667; }
+    }
+    @keyframes ripple {
+      to { transform: scale(1); opacity: 0; }
+    }
+    .ripple-target { position: relative; overflow: hidden; isolation: isolate; }
+    .ripple {
+      position: absolute;
+      border-radius: 50%;
+      background: currentColor;
+      pointer-events: none;
+      opacity: 0.13;
+      transform: scale(0);
+      animation: ripple 0.5s ease-out forwards;
+      z-index: -1;
+    }
+
+    /* 主题切换：View Transitions 圆形揭示。
+       note
+       旧实现用 documentElement.animate({clipPath}, {pseudoElement}) 驱动揭示
+       但各引擎对「WAAPI 操作 ::view-transition-* 伪元素」的支持不一致
+       有的直接 TypeError，有的动画压根没挂到伪元素上。
+       更关键的是，过渡的生命周期只由「伪元素上能被识别的动画」决定
+       一旦那条 WAAPI 动画不被计入，过渡就走最短路径提前收场，表现为圆形扩散到一半定住，随后伪元素树销毁、画面跳变
+       而浏览器默认的交叉淡化本身就是靠这些伪元素上的 CSS 动画跑起来的，
+       因此改用 CSS 动画驱动。 */
+    :root {
+      /* 扩散几何，由 JS 在 startViewTransition 之前写入。
+         必须提前写入：伪元素动画启动的那一刻就要能读到正确值，防止回落 */
+      --vt-x: 50%;
+      --vt-y: 50%;
+      --vt-r: 100%;
+    }
+    ::view-transition-group(root) { animation: none; }
+    ::view-transition-image-pair(root) { isolation: auto; }
+    ::view-transition-old(root),
+    ::view-transition-new(root) { animation: none; mix-blend-mode: normal; display: block; }
+    ::view-transition-old(root) { z-index: 1; }
+    ::view-transition-new(root) {
+      z-index: 2;
+      animation: vt-reveal 520ms cubic-bezier(0.2, 0, 0, 1) both;
+    }
+
+    /* 中心与半径都用百分比：clip-path: circle() 的百分比长度按 √(w²+h²)/√2 解析，
+       与伪元素盒子的实际尺寸解耦。这样即便某些引擎给快照的盒子尺寸
+       与视口（页面缩放、设备像素比、溢出）不一致，中心与终点仍按同一比例映射，
+       扩散起点与终点都不会偏移，也不会只扩到半路就停住。 */
+    @keyframes vt-reveal {
+      from { clip-path: circle(0% at var(--vt-x) var(--vt-y)); }
+      to { clip-path: circle(var(--vt-r) at var(--vt-x) var(--vt-y)); }
+    }
+
+    /* 全局的 reduce-motion 规则（* / ::before / ::after）匹配不到 view transition 伪元素，
+       需要单独把时长压到不可感知，同时让过渡生命周期正常走完、DOM 状态保持一致。 */
+    @media (prefers-reduced-motion: reduce) {
+      ::view-transition-old(root),
+      ::view-transition-new(root) { animation-duration: 1ms !important; }
+    }
+
+    /* 揭示期间冻结持续动画，避免反复弄脏正在被裁剪的新画面图层（冻结在当前帧，不产生跳变） */
+    html.vt-running .live-dot::before { animation-play-state: paused; }
+
+    /* 主题切换兜底：不支持 View Transitions 时，短暂启用全局颜色过渡 */
+    html.theme-animating,
+    html.theme-animating *,
+    html.theme-animating *::before,
+    html.theme-animating *::after {
+      transition-property: background-color, color, border-color, box-shadow, fill, stroke !important;
+      transition-duration: 0.4s !important;
+      transition-timing-function: cubic-bezier(0.2, 0, 0, 1) !important;
+    }
+
+    @media (max-width: 1000px) {
+      .shell { width: calc(100% - 48px); }
+      .tool-card { padding: 21px; }
+      .date-fields { gap: 8px; }
+      .date-fields input { font-size: 12px; padding-left: 11px; padding-right: 12px; }
+      .date-fields input::-webkit-calendar-picker-indicator { margin-left: 4px; }
+      .date-fields .field-label { left: 11px; }
+      .unit-option { gap: 8px; }
+      .select-wrap select { min-width: 116px; padding-left: 10px; }
+      .timezone-selector button { padding-inline: 10px; }
+      .format-note { display: none; }
+    }
+    @media (max-width: 760px) {
+      .shell { width: calc(100% - 40px); max-width: 600px; }
+      .header-inner { height: 77px; gap: 12px; }
+      .brand-mark { width: 36px; height: 36px; border-radius: 12px; }
+      .brand-name { font-size: 20px; }
+      .brand-caption { font-size: 8px; letter-spacing: 1.4px; margin-top: 4px; }
+      .header-actions { gap: 5px; }
+      .header-divider, .guide-button { display: none; }
+      .palette-button { padding: 10px 13px; font-size: 12px; }
+      main { padding-top: 28px; }
+      .eyebrow { font-size: 9px; letter-spacing: 1.8px; }
+      h1 { font-size: 29px; letter-spacing: -0.6px; }
+      .intro-description { max-width: 300px; font-size: 12px; line-height: 1.9; margin-top: 8px; margin-bottom: 22px; }
+      .live-panel { padding: 21px 23px 23px; border-radius: 23px; }
+      .live-heading { font-size: 11px; }
+      .live-status { display: none; }
+      .live-units button { min-width: 54px; padding: 4px 8px; font-size: 10px; }
+      .live-main { gap: 15px; flex-wrap: wrap; margin-top: 13px; }
+      .live-content { min-width: 0; }
+      .live-number { font-size: clamp(36px, 7.5vw, 50px); letter-spacing: -1.9px; }
+      .live-number.is-milliseconds { font-size: clamp(28px, 6.3vw, 43px); letter-spacing: -1.6px; }
+      .live-date { font-size: 10px; }
+      .live-actions { padding-top: 0; margin-left: auto; gap: 7px; }
+      .copy-live { width: 37px; height: 37px; padding: 0; }
+      .copy-live span { display: none; }
+      .pause-button { width: 37px; height: 37px; }
+      .pause-button .icon { width: 17px; height: 17px; }
+      .tool-grid { grid-template-columns: 1fr; gap: 16px; margin-top: 18px; }
+      .tool-card { padding: 23px; border-radius: 22px; }
+      .tool-heading { margin-bottom: 19px; }
+      .tool-heading h2 { font-size: 17px; }
+      .date-fields { gap: 12px; }
+      .date-fields input { font-size: 14px; padding-left: 15px; padding-right: 14px; }
+      .date-fields input::-webkit-calendar-picker-indicator { margin-left: 6px; }
+      .date-fields .field-label { left: 15px; }
+      .select-wrap select { min-width: 137px; }
+      .timezone-selector button { padding-inline: 15px; }
+      .field-message { font-size: 10px; }
+      .results-section { margin-top: 28px; }
+      .results-heading { align-items: flex-start; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+      .results-heading h2 { font-size: 18px; }
+      .results-controls { gap: 12px; margin-left: auto; }
+      .result-source { font-size: 9px; }
+      .result-tab { font-size: 10px; padding: 6px 10px; }
+      .copy-all { font-size: 10px; }
+      .results-table th { padding: 11px 15px; font-size: 9px; }
+      .results-table th:first-child { width: 26%; }
+      .results-table th:last-child { width: 42px; }
+      .results-table td { padding: 13px 15px; height: 57px; }
+      .results-table td:first-child { font-size: 10px; }
+      .result-value { font-size: 10px; line-height: 1.9; }
+      .results-table td:last-child { padding-right: 8px; }
+      .row-copy { width: 28px; height: 28px; }
+      .row-copy .icon { width: 13px; height: 13px; }
+      .result-footnote { font-size: 9px; align-items: flex-start; }
+      .result-footnote .icon { margin-top: 2px; }
+      .site-footer { margin-top: 27px; padding-block: 20px; font-size: 9px; gap: 15px; }
+      .footer-right { gap: 12px; }
+    }
+    @media (max-width: 420px) {
+      .shell { width: calc(100% - 32px); }
+      .brand { gap: 9px; }
+      .palette-button { width: 39px; height: 39px; padding: 0; justify-content: center; }
+      .palette-button span { display: none; }
+      .settings-panel { width: 294px; padding: 20px; }
+      .live-panel { padding-inline: 19px; }
+      .live-main { gap: 11px; }
+      .live-number { font-size: 39px; }
+      .live-number.is-milliseconds { font-size: 30px; }
+      .live-actions { align-self: flex-end; }
+      .copy-live, .pause-button { width: 33px; height: 33px; }
+      .live-date { font-size: 9px; }
+      .tool-card { padding: 21px 19px; }
+      .date-fields { gap: 9px; grid-template-columns: 1.1fr 1fr; }
+      .date-fields input { font-size: 12px; padding-left: 11px; padding-right: 10px; }
+      .date-fields input::-webkit-calendar-picker-indicator { margin-left: 2px; padding: 3px; }
+      .date-fields .field-label { left: 11px; }
+      .unit-option { gap: 9px; }
+      .option-label { font-size: 11px; }
+      .select-wrap select { min-width: 113px; font-size: 10px; }
+      .timezone-selector button { padding-inline: 10px; }
+      .results-controls { width: 100%; justify-content: space-between; margin-top: 2px; }
+      .results-table th:first-child { width: 26%; }
+      .results-table th, .results-table td { padding-left: 12px; padding-right: 8px; }
+      .privacy-label .icon { display: none; }
+      .footer-brand { gap: 5px; }
+      .footer-right { gap: 10px; }
+      .toast { font-size: 11px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { animation: none !important; transition-duration: 0.01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">跳转到转换工具</a>
+
+  <svg xmlns="http://www.w3.org/2000/svg" class="sprite" aria-hidden="true">
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 6.8v5.5l3.4 2.1M12 1.5v2M22.5 12h-2M12 22.5v-2M1.5 12h2"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M15.5 4H6a2 2 0 0 0-2 2v9.5"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M9 6v12M15 6v12" stroke-width="2.2"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="m9 5 10 7-10 7Z"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h15m-6-6 6 6-6 6"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="4" y="5.5" width="16" height="15" rx="3"/><path d="M8 3v5m8-5v5M4 11h16M8 15h2m4 0h2m-8 3h2"/></symbol>
+    <symbol id="i-timestamp" viewBox="0 0 24 24"><path d="m9 4-3 16M17 4l-3 16M4 9h16M3 15h16"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.1 14.1A8.6 8.6 0 0 1 9.9 3.9a8.6 8.6 0 1 0 10.2 10.2Z"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+    <symbol id="i-palette" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18h1.5a2 2 0 0 0 1.3-3.5 1.5 1.5 0 0 1 1-2.7H18a3 3 0 0 0 3-3A9 9 0 0 0 12 3Z"/><circle cx="7.5" cy="10" r=".7"/><circle cx="11" cy="6.8" r=".7"/><circle cx="15.5" cy="8" r=".7"/><circle cx="6.7" cy="14.3" r=".7"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path d="M12 6v15m0-15C9 3 5 3.5 3 4.5V19c3-1.5 6-1 9 2m0-15c3-3 7-2.5 9-1.5V19c-3-1.5-6-1-9 2"/></symbol>
+    <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m7 10 5 5 5-5"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6 6a8 8 0 0 1 13 3l1 3M4 12l1 3a8 8 0 0 0 13 3"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="m12 3 8 3v5c0 5-5 8.5-8 10-3-1.5-8-5-8-10V6Z"/><path d="m8.5 11.5 2.5 2.5 4.5-5"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5m0-9v.2"/></symbol>
+  </svg>
+
+  <header class="site-header">
+    <div class="shell header-inner">
+      <a href="#" class="brand" aria-label="首页">
+        <span class="brand-mark"><svg class="icon" aria-hidden="true"><use href="#i-clock"/></svg></span>
+        <span><span class="brand-name">晓刻</span><span class="brand-caption">UNIX TIMESTAMP</span></span>
+      </a>
+      <nav class="header-actions" aria-label="页面设置">
+        <button class="guide-button ripple-target" id="open-guide" type="button"><svg class="icon" aria-hidden="true"><use href="#i-book"/></svg>使用指南</button>
+        <span class="header-divider" aria-hidden="true"></span>
+        <button class="icon-button theme-toggle" id="theme-toggle" type="button" aria-label="切换到深色模式" title="切换到深色模式"><svg class="icon" aria-hidden="true"><use href="#i-moon"/></svg></button>
+        <button class="palette-button ripple-target" id="palette-button" type="button" aria-label="主题配色" aria-expanded="false" aria-controls="theme-settings" aria-haspopup="dialog"><svg class="icon" aria-hidden="true"><use href="#i-palette"/></svg><span>主题配色</span></button>
+        <div class="settings-panel" id="theme-settings" role="dialog" aria-labelledby="settings-title" hidden>
+          <h2 class="settings-title" id="settings-title">选一个喜欢的颜色</h2>
+          <p class="settings-description">一点个性，让每一刻都顺眼。</p>
+          <div class="color-options" role="group" aria-label="主题颜色">
+            <button type="button" class="color-choice" data-color="sage" aria-label="鼠尾草绿" aria-pressed="true"><span class="color-dot" style="background:#6b845a"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg></span>鼠尾草</button>
+            <button type="button" class="color-choice" data-color="iris" aria-label="鸢尾紫" aria-pressed="false"><span class="color-dot" style="background:#9275ad"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg></span>鸢尾紫</button>
+            <button type="button" class="color-choice" data-color="blue" aria-label="海盐蓝" aria-pressed="false"><span class="color-dot" style="background:#6392a5"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg></span>海盐蓝</button>
+            <button type="button" class="color-choice" data-color="apricot" aria-label="杏子橙" aria-pressed="false"><span class="color-dot" style="background:#ba8c5f"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg></span>杏子橙</button>
+            <button type="button" class="color-choice" data-color="rose" aria-label="蔷薇粉" aria-pressed="false"><span class="color-dot" style="background:#b37b8e"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg></span>蔷薇粉</button>
+          </div>
+          <p class="mode-label">外观模式</p>
+          <div class="mode-options seg" role="group" aria-label="外观模式">
+            <button class="mode-choice" type="button" data-mode="light" aria-pressed="true">浅色</button>
+            <button class="mode-choice" type="button" data-mode="dark" aria-pressed="false">深色</button>
+            <button class="mode-choice" type="button" data-mode="system" aria-pressed="false">跟随系统</button>
+          </div>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main class="shell" id="main-content" tabindex="-1">
+    <section class="intro" aria-labelledby="page-title">
+      <p class="eyebrow">A LITTLE CLARITY. EVERY SECOND.</p>
+      <h1 id="page-title">Unix 时间戳转换器</h1>
+      <p class="intro-description">在数字与日期之间，轻松转换。为每一秒，找到清晰的表达。</p>
+    </section>
+
+    <section class="live-panel" aria-labelledby="live-heading" data-paused="false">
+      <div class="live-top">
+        <h2 class="live-heading" id="live-heading"><span class="live-dot" aria-hidden="true"></span>当前 Unix 时间戳<span class="live-status" id="live-status">实时更新中</span></h2>
+        <div class="segmented live-units seg" role="group" aria-label="实时时间戳单位">
+          <button type="button" data-live-unit="s" aria-pressed="true">秒 s</button>
+          <button type="button" data-live-unit="ms" aria-pressed="false">毫秒 ms</button>
+        </div>
+      </div>
+      <div class="live-main">
+        <div class="live-content">
+          <div class="live-number" id="live-value" role="timer" aria-live="off" aria-label="当前 Unix 时间戳">0000000000</div>
+          <p class="live-date" id="live-date">正在读取你的本地时间…</p>
+        </div>
+        <div class="live-actions">
+          <button type="button" class="copy-live ripple-target" id="copy-live" aria-label="复制当前时间戳"><svg class="icon" aria-hidden="true"><use href="#i-copy"/></svg><span>复制时间戳</span></button>
+          <button type="button" class="icon-button pause-button" id="pause-live" aria-label="暂停实时更新" title="暂停实时更新" aria-pressed="false"><svg class="icon" aria-hidden="true"><use href="#i-pause"/></svg></button>
+        </div>
+      </div>
+    </section>
+
+    <div class="tool-grid">
+      <form class="tool-card" id="timestamp-form" novalidate>
+        <div class="tool-heading">
+          <span class="tool-icon"><svg class="icon" aria-hidden="true"><use href="#i-timestamp"/></svg></span>
+          <div><h2>时间戳转日期</h2><p>一串数字，一个准确的时刻。</p></div>
+        </div>
+        <div class="field timestamp-field" id="timestamp-field">
+          <label class="field-label" for="timestamp-input">Unix 时间戳</label>
+          <input id="timestamp-input" type="text" inputmode="decimal" placeholder="例如 1735689600" maxlength="64" autocomplete="off" spellcheck="false" aria-describedby="timestamp-message" aria-invalid="false">
+          <button class="icon-button clear-input" id="clear-timestamp" type="button" aria-label="清空时间戳" title="清空"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
+        </div>
+        <div class="form-option-row">
+          <div class="unit-option">
+            <label class="option-label" for="timestamp-unit">时间单位</label>
+            <div class="select-wrap">
+              <select id="timestamp-unit" aria-label="输入时间戳的单位">
+                <option value="auto">自动识别</option>
+                <option value="s">秒 (s)</option>
+                <option value="ms">毫秒 (ms)</option>
+                <option value="us">微秒 (us)</option>
+                <option value="ns">纳秒 (ns)</option>
+              </select>
+              <svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg>
+            </div>
+          </div>
+          <button type="button" class="text-button" id="fill-timestamp"><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>填入此刻</button>
+        </div>
+        <p class="field-message" id="timestamp-message" aria-live="polite">自动识别秒、毫秒、微秒和纳秒，支持负数。</p>
+        <button type="submit" class="primary-button ripple-target">转换为日期<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></button>
+      </form>
+
+      <form class="tool-card" id="date-form" novalidate>
+        <div class="tool-heading">
+          <span class="tool-icon"><svg class="icon" aria-hidden="true"><use href="#i-calendar"/></svg></span>
+          <div><h2>日期转时间戳</h2><p>选定一个时刻，让数字来表达。</p></div>
+        </div>
+        <div class="date-fields">
+          <label class="field" id="date-field"><span class="field-label">日期</span><input type="date" id="date-input" min="0001-01-01" max="9999-12-31" required aria-describedby="date-message" aria-invalid="false"></label>
+          <label class="field" id="time-field"><span class="field-label">时间 · 24 小时制</span><input type="time" id="time-input" step="1" required aria-describedby="date-message" aria-invalid="false"></label>
+        </div>
+        <div class="form-option-row">
+          <div class="segmented timezone-selector seg" role="group" aria-label="日期所使用的时区">
+            <button type="button" data-zone="local" aria-pressed="true"><svg class="icon" aria-hidden="true"><use href="#i-globe"/></svg>本地时间</button>
+            <button type="button" data-zone="utc" aria-pressed="false">UTC</button>
+          </div>
+          <button type="button" class="text-button" id="fill-date"><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>填入此刻</button>
+        </div>
+        <p class="field-message" id="date-message" aria-live="polite">正在读取本地时区…</p>
+        <button type="submit" class="primary-button ripple-target">转换为时间戳<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></button>
+      </form>
+    </div>
+
+    <section class="results-section" id="results-section" aria-labelledby="results-title">
+      <div class="results-heading">
+        <div>
+          <h2 id="results-title">同一时刻，不同表达</h2>
+          <p class="result-source" id="result-source" role="status">页面打开时的时间快照</p>
+        </div>
+        <div class="results-controls">
+          <div class="result-tabs seg" role="tablist" aria-label="转换结果类型">
+            <button type="button" class="result-tab" id="tab-dates" role="tab" aria-selected="true" aria-controls="results-panel" data-result-tab="dates" tabindex="0">日期格式</button>
+            <button type="button" class="result-tab" id="tab-timestamps" role="tab" aria-selected="false" aria-controls="results-panel" data-result-tab="timestamps" tabindex="-1">时间戳</button>
+          </div>
+          <button type="button" class="text-button copy-all" id="copy-all"><svg class="icon" aria-hidden="true"><use href="#i-copy"/></svg>复制全部</button>
+        </div>
+      </div>
+      <div id="results-panel" role="tabpanel" aria-labelledby="tab-dates" tabindex="0">
+        <div class="results-table-wrap">
+          <table class="results-table" aria-label="时间转换结果">
+            <thead><tr><th scope="col">格式</th><th scope="col">转换结果</th><th scope="col"><span class="sr-only">复制</span></th></tr></thead>
+            <tbody id="results-body"></tbody>
+          </table>
+        </div>
+      </div>
+      <p class="result-footnote"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg><span id="result-footnote">Unix 时间戳不受时区影响。本地时间根据你的设备时区显示。</span></p>
+    </section>
+
+    <footer class="site-footer">
+      <span class="footer-brand"><svg class="icon" aria-hidden="true"><use href="#i-clock"/></svg>晓刻 · Made with ❤️ by <a href="https://github.com/lingyicute" target="_blank" rel="noopener noreferrer">lingyicute</a></span>
+      <div class="footer-right"><span class="privacy-label"><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg>本地运算，数据不上传</span><button class="footer-link" id="footer-guide" type="button">使用指南</button></div>
+    </footer>
+  </main>
+
+  <dialog id="guide-dialog" aria-labelledby="guide-title">
+    <div class="dialog-heading"><h2 id="guide-title">关于时间的小指南</h2><button class="icon-button" id="close-guide" type="button" aria-label="关闭指南"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button></div>
+    <section class="guide-section"><h3>Unix 时间戳是什么？</h3><p>它表示从 1970 年 1 月 1 日 00:00:00 UTC 起经过的时间，不包含闰秒。时间戳本身与时区无关，负数表示这个起点之前的时刻。</p></section>
+    <section class="guide-section"><h3>该选择哪一种单位？</h3><p>自动模式会按整数部分的位数判断常见时间戳。早期日期、很远的未来或较小的数值可能存在歧义，这时请手动选择单位。</p><div class="unit-guide"><div><code>s</code>秒 · 通常 10 位</div><div><code>ms</code>毫秒 · 通常 13 位</div><div><code>us</code>微秒 · 通常 16 位</div><div><code>ns</code>纳秒 · 通常 19 位</div></div></section>
+    <section class="guide-section"><h3>本地时间与 UTC 有何不同？</h3><p>本地时间使用设备时区，并自动处理夏令时；UTC 是协调世界时。日期表单中的时区决定输入时间的含义，转换结果会同时展示这两种表达。</p></section>
+    <section class="guide-section"><h3>精度与隐私</h3><p>使用 BigInt 保留纳秒精度。ISO 8601 与 RFC 3339 保留小数秒，RFC 2822 仅显示整秒。所有转换与复制均在本地完成，主题偏好保存在你的浏览器中。</p></section>
+    <button class="primary-button dialog-done ripple-target" id="guide-done" type="button">明白了<svg class="icon" aria-hidden="true"><use href="#i-check"/></svg></button>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg><span id="toast-message"></span></div>
+  <noscript><p style="padding:24px;text-align:center">请启用 JavaScript，以使用实时时间戳和转换功能。</p></noscript>
+
+  <script>
+    (() => {
+      'use strict';
+
+      const doc = document;
+      const $ = (id) => doc.getElementById(id);
+      const root = doc.documentElement;
+      const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
+      const darkPreference = matchMedia('(prefers-color-scheme: dark)');
+
+      // 缓存 DOM 引用，减少重复查询开销
+      const els = {
+        root,
+        themeToggle: $('theme-toggle'),
+        paletteButton: $('palette-button'),
+        settingsPanel: $('theme-settings'),
+        livePanel: doc.querySelector('.live-panel'),
+        liveValue: $('live-value'),
+        liveDate: $('live-date'),
+        liveStatus: $('live-status'),
+        pauseLive: $('pause-live'),
+        copyLive: $('copy-live'),
+        timestampForm: $('timestamp-form'),
+        timestampInput: $('timestamp-input'),
+        timestampUnit: $('timestamp-unit'),
+        timestampField: $('timestamp-field'),
+        timestampMessage: $('timestamp-message'),
+        clearTimestamp: $('clear-timestamp'),
+        fillTimestamp: $('fill-timestamp'),
+        dateForm: $('date-form'),
+        dateInput: $('date-input'),
+        timeInput: $('time-input'),
+        dateField: $('date-field'),
+        timeField: $('time-field'),
+        dateMessage: $('date-message'),
+        fillDate: $('fill-date'),
+        resultsSection: $('results-section'),
+        resultsBody: $('results-body'),
+        resultSource: $('result-source'),
+        resultFootnote: $('result-footnote'),
+        copyAll: $('copy-all'),
+        resultTabs: doc.querySelectorAll('[data-result-tab]'),
+        dateZoneButtons: doc.querySelectorAll('[data-zone]'),
+        liveUnitButtons: doc.querySelectorAll('[data-live-unit]'),
+        modeButtons: doc.querySelectorAll('[data-mode]'),
+        colorChoices: doc.querySelectorAll('.color-choice'),
+        guide: $('guide-dialog'),
+        toast: $('toast'),
+        toastMessage: $('toast-message'),
+        toastIconUse: $('toast').querySelector('use'),
+      };
+
+      // 兜底复制用的离屏 textarea：仅在 Clipboard API 不可用时才会用到，
+      // 因此改为首次需要时才创建并复用，启动阶段少一个常驻的 fixed 元素。
+      let hiddenCopy = null;
+      function getHiddenCopy() {
+        if (!hiddenCopy) {
+          hiddenCopy = doc.createElement('textarea');
+          hiddenCopy.setAttribute('readonly', '');
+          hiddenCopy.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;font-size:16px;width:1px;height:1px';
+          doc.body.appendChild(hiddenCopy);
+        }
+        return hiddenCopy;
+      }
+
+      // 写文本前先比较：内容没变就不碰 DOM（避免无谓的样式/布局失效）；
+      // 单一文本节点时原地改 data，不销毁重建节点（实时数字每 100ms 刷新一次，收益最明显）。
+      function setText(el, text) {
+        const node = el.firstChild;
+        if (node && node.nodeType === 3 && node.nextSibling === null) {
+          if (node.data !== text) node.data = text;
+        } else if (el.textContent !== text) {
+          el.textContent = text;
+        }
+      }
+
+      const unitNames = { s: '秒', ms: '毫秒', us: '微秒', ns: '纳秒' };
+      const unitPowers = { s: 9, ms: 6, us: 3, ns: 0 };
+      const billion = 1000000000n;
+      const million = 1000000n;
+
+      let localZone = '本地时区';
+      try { localZone = Intl.DateTimeFormat().resolvedOptions().timeZone || localZone; } catch (_) {}
+
+      let storedMode = 'light';
+      try { storedMode = localStorage.getItem('shike-mode') || 'light'; } catch (_) {}
+      let mode = ['light', 'dark', 'system'].includes(storedMode) ? storedMode : 'light';
+
+      let liveUnit = 's';
+      let livePaused = false;
+      let liveNow = Date.now();
+      let lastLiveValue = '';
+      let lastLiveSecond = -1;
+      let selectedZone = 'local';
+      let resultTab = 'dates';
+      let currentResult = null;
+      let toastTimer;
+      const copyTimers = new WeakMap();
+      const timestampHint = '自动识别秒、毫秒、微秒和纳秒，支持负数。';
+
+      function savePreference(key, value) {
+        try { localStorage.setItem(key, value); } catch (_) {}
+      }
+
+      /* ---------- 分段控件滑动指示器 ---------- */
+      const segGroups = Array.from(doc.querySelectorAll('.seg'));
+      const segMeasured = new WeakSet();
+      // 读写分离：先对所有分组统一测量（只读，至多触发一次布局），再统一写入。
+      // 原先逐组“读 offset → 写样式 → 读下一组 offset”，每组写入都会让下一组的读取重新强制布局。
+      function measureSeg(group) {
+        const active = group.querySelector(':scope > [aria-pressed="true"], :scope > [aria-selected="true"]');
+        if (!active) return null;
+        const w = active.offsetWidth;
+        if (!w) return null; // 容器处于隐藏状态（如设置面板未展开），等可见后由 ResizeObserver 补测
+        return { group, x: active.offsetLeft, y: active.offsetTop, w, h: active.offsetHeight };
+      }
+      function applySeg(m) {
+        const group = m.group;
+        const first = !segMeasured.has(group);
+        if (first) group.classList.remove('seg-animate');
+        const style = group.style;
+        style.setProperty('--seg-x', m.x + 'px');
+        style.setProperty('--seg-y', m.y + 'px');
+        style.setProperty('--seg-w', m.w + 'px');
+        style.setProperty('--seg-h', m.h + 'px');
+        group.classList.add('seg-ready');
+        if (first) {
+          segMeasured.add(group);
+          // 首次定位不做动画，下一帧后才开启过渡，避免指示器从左上角“飞入”
+          requestAnimationFrame(() => requestAnimationFrame(() => group.classList.add('seg-animate')));
+        }
+      }
+      function syncSegs(groups) {
+        const measured = [];
+        for (const group of groups) {
+          const m = group && measureSeg(group);
+          if (m) measured.push(m);
+        }
+        for (const m of measured) applySeg(m);
+      }
+      function syncSeg(group) {
+        if (group) syncSegs([group]);
+      }
+      const syncAllSegs = () => syncSegs(segGroups);
+      if ('ResizeObserver' in window) {
+        const segObserver = new ResizeObserver((entries) => syncSegs(entries.map((entry) => entry.target)));
+        segGroups.forEach((group) => segObserver.observe(group));
+      } else {
+        window.addEventListener('resize', syncAllSegs, { passive: true });
+      }
+      if (doc.fonts) {
+        if (doc.fonts.ready) doc.fonts.ready.then(syncAllSegs).catch(() => {});
+        // 字体样式表现在是非阻塞加载的，fonts.ready 可能早于字体真正到位；
+        // 字体到位后文字宽度会变，需要再补测一次指示器位置。
+        if (typeof doc.fonts.addEventListener === 'function') doc.fonts.addEventListener('loadingdone', syncAllSegs);
+      }
+
+      /* ---------- 主题切换（带过渡） ---------- */
+      let vtBusy = false; // 圆形揭示进行中：暂停时间戳文字刷新等会弄脏图层的更新
+      let vtToken = 0;
+      let vtGuard = 0;    // 兜底计时器：个别引擎的 Promise 可能永不落定，避免页面被永久冻结
+      let vtGeometry = null;
+      const VT_DURATION = 520;
+
+      function updateTheme() {
+        const dark = mode === 'dark' || (mode === 'system' && darkPreference.matches);
+        root.dataset.theme = dark ? 'dark' : 'light';
+        const label = dark ? '切换到浅色模式' : '切换到深色模式';
+        els.themeToggle.setAttribute('aria-label', label);
+        els.themeToggle.title = label;
+        els.themeToggle.querySelector('use').setAttribute('href', dark ? '#i-sun' : '#i-moon');
+
+        els.modeButtons.forEach((button) => {
+          button.setAttribute('aria-pressed', String(button.dataset.mode === mode));
+        });
+        els.colorChoices.forEach((button) => {
+          button.setAttribute('aria-pressed', String(button.dataset.color === root.dataset.color));
+        });
+        syncSeg(els.modeButtons[0] && els.modeButtons[0].parentElement);
+        scheduleMeta();
+      }
+
+      /* 以下三项刻意移出切换的关键路径：
+         - theme-color 的 getComputedStyle 会强制样式重算
+         - localStorage 写入是同步磁盘 I/O
+         它们若发生在新旧画面截图阶段，会直接拖慢扩散动画的第一帧。 */
+      let metaFrame = 0;
+      function syncMetaTheme() {
+        const meta = doc.querySelector('meta[name="theme-color"]');
+        if (meta) meta.content = getComputedStyle(root).getPropertyValue('--surface').trim();
+      }
+      function scheduleMeta() {
+        if (vtBusy) return; // 揭示结束后统一同步
+        cancelAnimationFrame(metaFrame);
+        metaFrame = requestAnimationFrame(syncMetaTheme);
+      }
+
+      let persistTimer = 0;
+      function persistTheme() {
+        persistTimer = 0;
+        savePreference('shike-mode', mode);
+        savePreference('shike-color', root.dataset.color);
+      }
+      function schedulePersist() {
+        clearTimeout(persistTimer);
+        persistTimer = setTimeout(persistTheme, 900);
+      }
+      function flushPersist() {
+        if (!persistTimer) return;
+        clearTimeout(persistTimer);
+        persistTheme();
+      }
+      window.addEventListener('pagehide', flushPersist);
+      doc.addEventListener('visibilitychange', () => { if (doc.hidden) flushPersist(); });
+
+      let themeAnimTimer = null;
+      function endThemeTransition(token) {
+        if (token !== vtToken) return; // 已被更新的一次切换取代，由它负责收尾
+        if (vtGuard) { clearTimeout(vtGuard); vtGuard = 0; }
+        vtBusy = false;
+        root.classList.remove('vt-running');
+        syncMetaTheme();
+        renderLive(true);
+      }
+
+      /* 计算扩散几何。三个来源按可靠性排序，绝不落到 (0,0)：
+         1) 指针真实坐标 —— click 事件自带 clientX/Y，天然“跟随点击位置”；
+         2) 触发元素中心 —— 键盘激活时事件坐标为 0,0，此时改用元素矩形；
+         3) 视口中心 —— 元素矩形也拿不到时兜底（绝不从左上角开始）。 */
+      function revealGeometry(event, el) {
+        const width = Math.max(1, window.innerWidth || 1);
+        const height = Math.max(1, window.innerHeight || 1);
+        let x = null;
+        let y = null;
+        const px = event ? event.clientX : null;
+        const py = event ? event.clientY : null;
+        if (Number.isFinite(px) && Number.isFinite(py) && (px !== 0 || py !== 0)) {
+          x = px;
+          y = py;
+        }
+        if (x === null && el && typeof el.getBoundingClientRect === 'function') {
+          try {
+            const rect = el.getBoundingClientRect();
+            // 有些引擎在元素不可见 / 布局未就绪时会返回全零矩形，
+            // 若照单全收就会得到 (0,0)，即“永远从左上角扩散”。
+            if (rect.width > 0 || rect.height > 0) {
+              x = rect.left + rect.width / 2;
+              y = rect.top + rect.height / 2;
+            }
+          } catch (_) {}
+        }
+        if (x === null) {
+          x = width / 2;
+          y = height / 2;
+        }
+        x = Math.min(Math.max(x, 0), width);
+        y = Math.min(Math.max(y, 0), height);
+        // 半径也用百分比：clip-path circle() 的百分比参考值是 √(w²+h²)/√2，
+        // 与伪元素盒子尺寸解耦，缩放 / DPR / 快照尺寸差异都不会让它停在半路。
+        const reference = Math.hypot(width, height) / Math.SQRT2;
+        const needed = Math.hypot(Math.max(x, width - x), Math.max(y, height - y));
+        const radius = Math.min(140, (needed / reference) * 100 * 1.03);
+        return {
+          x: ((x / width) * 100).toFixed(3),
+          y: ((y / height) * 100).toFixed(3),
+          r: radius.toFixed(3)
+        };
+      }
+
+      function writeGeometry(geo) {
+        root.style.setProperty('--vt-x', geo.x + '%');
+        root.style.setProperty('--vt-y', geo.y + '%');
+        root.style.setProperty('--vt-r', geo.r + '%');
+      }
+
+      /* ready 之后核对一次：若伪元素上没有任何揭示动画（个别引擎没把 CSS 动画挂上去），
+         就用 WAAPI 补一份键帧完全一致的动画；若两边都不支持，也只是瞬间切换，不会卡住。 */
+      function ensureRevealAnimation() {
+        if (typeof root.getAnimations !== 'function' || !vtGeometry) return;
+        let exists = false;
+        try {
+          exists = root.getAnimations({ subtree: true }).some((anim) => {
+            const effect = anim.effect;
+            return !!effect && effect.pseudoElement === '::view-transition-new(root)';
+          });
+        } catch (_) {
+          return;
+        }
+        if (exists) return;
+        const { x, y, r } = vtGeometry;
+        try {
+          root.animate(
+            { clipPath: [`circle(0% at ${x}% ${y}%)`, `circle(${r}% at ${x}% ${y}%)`] },
+            { duration: VT_DURATION, easing: 'cubic-bezier(0.2, 0, 0, 1)', fill: 'both', pseudoElement: '::view-transition-new(root)' }
+          );
+        } catch (_) {}
+      }
+
+      function withThemeTransition(update, originEl, originEvent) {
+        schedulePersist();
+        if (reduceMotion.matches) {
+          update();
+          return;
+        }
+        // 优先：View Transitions 圆形揭示，从真实点击位置向外扩散
+        if (typeof doc.startViewTransition === 'function' && !doc.hidden) {
+          vtGeometry = revealGeometry(originEvent, originEl);
+          // 必须在旧快照捕获之前写入：伪元素动画启动那一刻就要读到正确的 --vt-x/--vt-y/--vt-r
+          writeGeometry(vtGeometry);
+          const token = ++vtToken;
+          let transition = null;
+          try {
+            transition = doc.startViewTransition(update);
+          } catch (_) {
+            transition = null;
+          }
+          if (transition) {
+            vtBusy = true;
+            root.classList.add('vt-running');
+            clearTimeout(vtGuard);
+            vtGuard = setTimeout(() => endThemeTransition(token), VT_DURATION + 1100);
+            if (transition.ready && typeof transition.ready.then === 'function') {
+              transition.ready.then(ensureRevealAnimation).catch(() => {});
+            }
+            transition.finished.catch(() => {}).then(() => endThemeTransition(token));
+            return;
+          }
+        }
+        // 兜底：短暂开启全局颜色过渡
+        vtGeometry = null;
+        root.classList.add('theme-animating');
+        void root.offsetWidth;
+        update();
+        clearTimeout(themeAnimTimer);
+        themeAnimTimer = setTimeout(() => root.classList.remove('theme-animating'), 450);
+      }
+
+      els.themeToggle.addEventListener('click', (event) => {
+        withThemeTransition(() => {
+          mode = root.dataset.theme === 'dark' ? 'light' : 'dark';
+          updateTheme();
+        }, els.themeToggle, event);
+      }, { passive: true });
+
+      els.modeButtons.forEach((button) => {
+        button.addEventListener('click', (event) => {
+          if (mode === button.dataset.mode) return;
+          withThemeTransition(() => {
+            mode = button.dataset.mode;
+            updateTheme();
+          }, button, event);
+        }, { passive: true });
+      });
+
+      els.colorChoices.forEach((button) => {
+        button.addEventListener('click', (event) => {
+          if (root.dataset.color === button.dataset.color) return;
+          withThemeTransition(() => {
+            root.dataset.color = button.dataset.color;
+            updateTheme();
+          }, button.querySelector('.color-dot') || button, event);
+        }, { passive: true });
+      });
+
+      darkPreference.addEventListener('change', () => {
+        if (mode === 'system') withThemeTransition(updateTheme, null, null);
+      });
+
+      let settingsCloseTimer = null;
+      let settingsGen = 0;
+      function setSettings(open, returnFocus = false) {
+        const panel = els.settingsPanel;
+        if (open) {
+          if (!panel.hidden && !panel.classList.contains('is-closing')) return;
+          settingsGen += 1;
+          clearTimeout(settingsCloseTimer);
+          panel.classList.remove('is-closing');
+          panel.hidden = false;
+          els.paletteButton.setAttribute('aria-expanded', 'true');
+          void panel.offsetWidth;
+          const active = panel.querySelector('.color-choice[aria-pressed="true"]');
+          if (active) active.focus();
+        } else {
+          if (panel.hidden || panel.classList.contains('is-closing')) return;
+          els.paletteButton.setAttribute('aria-expanded', 'false');
+          if (reduceMotion.matches) {
+            panel.hidden = true;
+            if (returnFocus) els.paletteButton.focus();
+            return;
+          }
+          settingsGen += 1;
+          const ticket = settingsGen;
+          panel.classList.add('is-closing');
+          clearTimeout(settingsCloseTimer);
+          let done = false;
+          const finish = () => {
+            if (done || ticket !== settingsGen) return;
+            if (!panel.classList.contains('is-closing')) return;
+            done = true;
+            panel.hidden = true;
+            panel.classList.remove('is-closing');
+            if (returnFocus) els.paletteButton.focus();
+          };
+          panel.addEventListener('animationend', finish, { once: true });
+          settingsCloseTimer = setTimeout(finish, 220);
+        }
+      }
+
+      els.paletteButton.addEventListener('click', () => {
+        const shouldOpen = els.settingsPanel.hidden || els.settingsPanel.classList.contains('is-closing');
+        setSettings(shouldOpen);
+      }, { passive: true });
+
+      doc.addEventListener('pointerdown', (event) => {
+        if (!els.settingsPanel.hidden && !els.settingsPanel.contains(event.target) && !els.paletteButton.contains(event.target)) {
+          setSettings(false);
+        }
+      }, { passive: true });
+
+      doc.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && !els.settingsPanel.hidden) setSettings(false, true);
+      });
+
+      doc.addEventListener('focusin', (event) => {
+        if (!els.settingsPanel.hidden && !els.settingsPanel.contains(event.target) && !els.paletteButton.contains(event.target)) setSettings(false);
+      });
+
+      /* ---------- 工具函数 ---------- */
+      const pad = (value, width = 2) => String(value).padStart(width, '0');
+      function yearString(year) {
+        return year >= 0 && year <= 9999 ? pad(year, 4) : (year < 0 ? '-' : '+') + pad(Math.abs(year), 6);
+      }
+      function offsetString(date) {
+        const offset = -date.getTimezoneOffset();
+        return 'UTC' + (offset >= 0 ? '+' : '-') + pad(Math.floor(Math.abs(offset) / 60)) + ':' + pad(Math.abs(offset) % 60);
+      }
+      function dateParts(date, utc = false) {
+        const prefix = utc ? 'getUTC' : 'get';
+        return {
+          year: date[prefix + 'FullYear'](),
+          month: date[prefix + 'Month']() + 1,
+          day: date[prefix + 'Date'](),
+          hour: date[prefix + 'Hours'](),
+          minute: date[prefix + 'Minutes'](),
+          second: date[prefix + 'Seconds']()
+        };
+      }
+      function humanDate(date, utc = false, fraction = '') {
+        const p = dateParts(date, utc);
+        return `${yearString(p.year)}-${pad(p.month)}-${pad(p.day)} ${pad(p.hour)}:${pad(p.minute)}:${pad(p.second)}` + (fraction ? '.' + fraction : '');
+      }
+
+      /* ---------- 实时计时器（优化：按需定时，避免 83ms 高频） ---------- */
+      let liveTimer = null;
+      let liveVisible = true; // 实时区块是否在视口内；滚出视口后没有必要继续以 100ms 频率刷新
+      function scheduleLive() {
+        if (liveTimer) {
+          clearInterval(liveTimer);
+          liveTimer = null;
+        }
+        if (livePaused || doc.hidden || !liveVisible) return;
+        const interval = liveUnit === 'ms' ? 100 : 1000;
+        liveTimer = setInterval(() => renderLive(), interval);
+        renderLive();
+      }
+      if ('IntersectionObserver' in window) {
+        new IntersectionObserver((entries) => {
+          const visible = entries[entries.length - 1].isIntersecting;
+          if (visible === liveVisible) return;
+          liveVisible = visible;
+          scheduleLive(); // 重新可见时会立即补一次渲染，用户看到的永远是最新值
+        }).observe(els.livePanel);
+      }
+      function renderLive(force = false) {
+        if (vtBusy) return; // 揭示期间不写 DOM，结束后会 renderLive(true) 补一次
+        if (!livePaused) liveNow = Date.now();
+        const second = Math.floor(liveNow / 1000);
+        const value = String(liveUnit === 's' ? second : liveNow);
+        if (value !== lastLiveValue || force) {
+          setText(els.liveValue, value);
+          lastLiveValue = value;
+        }
+        if (second !== lastLiveSecond || force) {
+          const date = new Date(liveNow);
+          const p = dateParts(date);
+          const weekday = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][date.getDay()];
+          setText(els.liveDate, `${p.year} 年 ${pad(p.month)} 月 ${pad(p.day)} 日 ${weekday}  ${pad(p.hour)}:${pad(p.minute)}:${pad(p.second)}  ·  ${offsetString(date)}`);
+          lastLiveSecond = second;
+        }
+      }
+
+      els.liveUnitButtons.forEach((button) => {
+        button.addEventListener('click', () => {
+          liveUnit = button.dataset.liveUnit;
+          els.liveUnitButtons.forEach((item) => item.setAttribute('aria-pressed', String(item === button)));
+          syncSeg(button.parentElement);
+          els.liveValue.classList.toggle('is-milliseconds', liveUnit === 'ms');
+          scheduleLive();
+        }, { passive: true });
+      });
+
+      els.pauseLive.addEventListener('click', () => {
+        livePaused = !livePaused;
+        const label = livePaused ? '继续实时更新' : '暂停实时更新';
+        els.pauseLive.setAttribute('aria-pressed', String(livePaused));
+        els.pauseLive.setAttribute('aria-label', label);
+        els.pauseLive.title = label;
+        els.pauseLive.querySelector('use').setAttribute('href', livePaused ? '#i-play' : '#i-pause');
+        els.livePanel.dataset.paused = String(livePaused);
+        els.liveStatus.textContent = livePaused ? '已暂停' : '实时更新中';
+        scheduleLive();
+      }, { passive: true });
+
+      doc.addEventListener('visibilitychange', scheduleLive);
+
+      scheduleLive();
+
+      /* ---------- 复制优化：复用离屏 textarea ---------- */
+      async function copyText(text, message = '已复制到剪贴板', button = null) {
+        let copied = false;
+        try {
+          if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(text);
+            copied = true;
+          }
+        } catch (_) {}
+
+        if (!copied) {
+          const previousFocus = doc.activeElement;
+          const field = getHiddenCopy();
+          field.value = text;
+          field.select();
+          field.setSelectionRange(0, field.value.length);
+          try {
+            copied = doc.execCommand('copy');
+          } catch (_) {}
+          if (previousFocus && previousFocus.focus) previousFocus.focus({ preventScroll: true });
+        }
+
+        if (copied) {
+          showToast(message);
+          if (button && button.isConnected) {
+            clearTimeout(copyTimers.get(button));
+            const use = button.querySelector('use');
+            if (use) use.setAttribute('href', '#i-check');
+            button.classList.add('is-copied');
+            copyTimers.set(button, setTimeout(() => {
+              const use2 = button.querySelector('use');
+              if (use2) use2.setAttribute('href', '#i-copy');
+              button.classList.remove('is-copied');
+              copyTimers.delete(button);
+            }, 1600));
+          }
+        } else {
+          showToast('浏览器未允许复制，请选中结果手动复制。', false);
+        }
+      }
+
+      function showToast(message, success = true) {
+        clearTimeout(toastTimer);
+        els.toastMessage.textContent = message;
+        els.toastIconUse.setAttribute('href', success ? '#i-check' : '#i-info');
+        els.toast.classList.add('show');
+        toastTimer = setTimeout(() => els.toast.classList.remove('show'), 2600);
+      }
+
+      els.copyLive.addEventListener('click', () => {
+        renderLive(); // 区块在视口外时计时器是停的，复制前先刷新一次，保证复制到的是最新值
+        copyText(els.liveValue.textContent, '当前时间戳已复制', els.copyLive);
+      }, { passive: true });
+
+      /* ---------- 时间戳解析 ---------- */
+      function floorDivide(value, divisor) {
+        const quotient = value / divisor;
+        return value < 0n && value % divisor !== 0n ? quotient - 1n : quotient;
+      }
+      function epochString(nanoseconds, unit) {
+        const negative = nanoseconds < 0n;
+        const absolute = negative ? -nanoseconds : nanoseconds;
+        const power = unitPowers[unit];
+        const factor = 10n ** BigInt(power);
+        const integer = absolute / factor;
+        const remainder = absolute % factor;
+        let value = integer.toString();
+        if (remainder !== 0n) value += '.' + remainder.toString().padStart(power, '0').replace(/0+$/, '');
+        return (negative ? '-' : '') + value;
+      }
+      function parseTimestamp(raw, selectedUnit) {
+        const value = raw.trim();
+        if (!value) throw new Error('请输入一个 Unix 时间戳。');
+        if (value.length > 64 || !/^[+-]?\d+(?:\.\d+)?$/.test(value)) {
+          throw new Error('请输入有效数字，可带小数或负号，不支持科学计数法。');
+        }
+        const negative = value.startsWith('-');
+        const unsigned = value.replace(/^[+-]/, '');
+        const [integer, fractional = ''] = unsigned.split('.');
+        const digits = integer.replace(/^0+/, '').length || 1;
+        let unit = selectedUnit;
+        if (unit === 'auto') unit = digits <= 10 ? 's' : digits <= 13 ? 'ms' : digits <= 16 ? 'us' : 'ns';
+        const power = unitPowers[unit];
+        if (fractional.slice(power).replace(/0/g, '')) throw new Error('小数精度超出纳秒，请减少小数位数。');
+        const fraction = fractional.slice(0, power).padEnd(power, '0');
+        let ns = BigInt(integer) * (10n ** BigInt(power)) + BigInt(fraction || '0');
+        if (negative) ns = -ns;
+        const ms = floorDivide(ns, million);
+        if (ms < -8640000000000000n || ms > 8640000000000000n) throw new Error('超出可转换的日期范围，请检查时间单位。');
+        if (ns > 8640000000000000n * million) throw new Error('超出可转换的日期范围，请检查时间单位。');
+        return { ns, unit, date: new Date(Number(ms)) };
+      }
+
+      function buildResult(ns) {
+        const date = new Date(Number(floorDivide(ns, million)));
+        const fraction = ((ns % billion + billion) % billion).toString().padStart(9, '0').replace(/0+$/, '');
+        const isoFraction = fraction.padEnd(3, '0');
+        const iso = date.toISOString().split('.')[0] + '.' + isoFraction + 'Z';
+        return {
+          ns,
+          dates: [
+            { label: '本地时间', note: offsetString(date), value: humanDate(date, false, fraction) + '  ' + offsetString(date) },
+            { label: 'UTC 时间', note: 'UTC+00:00', value: humanDate(date, true, fraction) + '  UTC' },
+            { label: 'ISO 8601', note: '', value: iso },
+            { label: 'RFC 2822', note: '', value: date.toUTCString().replace('GMT', '+0000') },
+            { label: 'RFC 3339', note: '', value: iso.replace(/Z$/, '+00:00') }
+          ],
+          timestamps: ['s', 'ms', 'us', 'ns'].map((unit) => ({ label: 'Unix ' + unitNames[unit], note: unit, value: epochString(ns, unit) }))
+        };
+      }
+
+      function makeIcon(name) {
+        const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.classList.add('icon');
+        svg.setAttribute('aria-hidden', 'true');
+        const use = doc.createElementNS('http://www.w3.org/2000/svg', 'use');
+        use.setAttribute('href', '#i-' + name);
+        svg.appendChild(use);
+        return svg;
+      }
+
+      let refreshAnimation = null;
+      function renderResults(animate = false) {
+        if (!currentResult) return;
+        const body = els.resultsBody;
+        body.replaceChildren();
+        const rows = currentResult[resultTab];
+        const fragment = doc.createDocumentFragment();
+        rows.forEach((row) => {
+          const tr = doc.createElement('tr');
+          const label = doc.createElement('td');
+          label.textContent = row.label;
+          if (row.note && resultTab === 'timestamps') {
+            const note = doc.createElement('span');
+            note.className = 'format-note';
+            note.textContent = row.note;
+            label.appendChild(note);
+          }
+          const value = doc.createElement('td');
+          value.className = 'result-value';
+          value.textContent = row.value;
+          const action = doc.createElement('td');
+          const button = doc.createElement('button');
+          button.type = 'button';
+          button.className = 'icon-button row-copy';
+          button.setAttribute('aria-label', '复制' + row.label);
+          button.title = '复制' + row.label;
+          button.appendChild(makeIcon('copy'));
+          button.addEventListener('click', () => copyText(row.value, row.label + '已复制', button), { passive: true });
+          action.appendChild(button);
+          tr.append(label, value, action);
+          fragment.appendChild(tr);
+        });
+        body.appendChild(fragment);
+
+        els.resultTabs.forEach((button) => {
+          const active = button.dataset.resultTab === resultTab;
+          button.setAttribute('aria-selected', String(active));
+          button.tabIndex = active ? 0 : -1;
+        });
+        if (els.resultTabs[0]) syncSeg(els.resultTabs[0].parentElement);
+        doc.getElementById('results-panel').setAttribute('aria-labelledby', resultTab === 'dates' ? 'tab-dates' : 'tab-timestamps');
+        setText(els.resultFootnote, resultTab === 'dates'
+          ? 'Unix 时间戳不受时区影响。本地时间根据你的设备时区显示。'
+          : '各单位均保留原始精度。微秒与纳秒使用 BigInt 计算，不丢失大整数精度。');
+
+        // 刷新动画改用 Web Animations：关键帧、时长、缓动与原 CSS 动画（0.45s ease）完全一致，
+        // 但不再需要“移除 class → 读 offsetWidth 强制回流 → 加回 class”这套技巧，
+        // 少一次同步强制布局；cancel() 保证快速连点切换时不会叠加多个动画。
+        if (animate && !reduceMotion.matches && typeof body.animate === 'function') {
+          if (refreshAnimation) refreshAnimation.cancel();
+          refreshAnimation = body.animate(
+            [
+              { opacity: 0.4, transform: 'translateY(3px)' },
+              { opacity: 1, transform: 'translateY(0)' }
+            ],
+            { duration: 450, easing: 'ease' }
+          );
+        }
+      }
+
+      els.resultTabs.forEach((button) => {
+        button.addEventListener('click', () => {
+          resultTab = button.dataset.resultTab;
+          renderResults(true);
+        }, { passive: true });
+        button.addEventListener('keydown', (event) => {
+          if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+          event.preventDefault();
+          resultTab = event.key === 'Home' ? 'dates' : event.key === 'End' ? 'timestamps' : resultTab === 'dates' ? 'timestamps' : 'dates';
+          renderResults(true);
+          doc.getElementById(resultTab === 'dates' ? 'tab-dates' : 'tab-timestamps').focus();
+        });
+      });
+
+      els.copyAll.addEventListener('click', () => {
+        if (!currentResult) return;
+        const text = [...currentResult.dates, ...currentResult.timestamps].map((row) => row.label + ': ' + row.value).join('\n');
+        copyText(text, '全部 9 种格式已复制', els.copyAll);
+      }, { passive: true });
+
+      function showResult(ns, tab, description) {
+        currentResult = buildResult(ns);
+        resultTab = tab;
+        setText(els.resultSource, description);
+        renderResults(true);
+        const rect = els.resultsSection.getBoundingClientRect();
+        if (rect.top > window.innerHeight - 140) {
+          els.resultsSection.scrollIntoView({ behavior: reduceMotion.matches ? 'instant' : 'smooth', block: 'start' });
+        }
+      }
+
+      /* ---------- 时间戳表单 ---------- */
+      function clearTimestampError() {
+        setText(els.timestampMessage, timestampHint); // 每次按键都会走这里，内容没变时不碰 DOM
+        els.timestampMessage.classList.remove('is-error');
+        els.timestampField.classList.remove('is-invalid');
+        els.timestampInput.setAttribute('aria-invalid', 'false');
+        els.clearTimestamp.hidden = !els.timestampInput.value;
+      }
+
+      els.timestampInput.addEventListener('input', clearTimestampError, { passive: true });
+      els.timestampUnit.addEventListener('change', clearTimestampError, { passive: true });
+
+      els.clearTimestamp.addEventListener('click', () => {
+        els.timestampInput.value = '';
+        clearTimestampError();
+        els.timestampInput.focus();
+      }, { passive: true });
+
+      function fillTimestamp() {
+        const unit = els.timestampUnit.value === 'auto' ? 's' : els.timestampUnit.value;
+        const ns = unit === 's' ? BigInt(Math.floor(Date.now() / 1000)) * billion : BigInt(Date.now()) * million;
+        els.timestampInput.value = epochString(ns, unit);
+        clearTimestampError();
+      }
+
+      els.fillTimestamp.addEventListener('click', () => {
+        fillTimestamp();
+        els.timestampInput.focus();
+      }, { passive: true });
+
+      els.timestampForm.addEventListener('submit', (event) => {
+        event.preventDefault();
+        try {
+          const parsed = parseTimestamp(els.timestampInput.value, els.timestampUnit.value);
+          clearTimestampError();
+          const identified = els.timestampUnit.value === 'auto' ? '自动识别为' : '输入单位：';
+          showResult(parsed.ns, 'dates', '来自时间戳 · ' + identified + unitNames[parsed.unit]);
+        } catch (error) {
+          els.timestampMessage.textContent = error.message;
+          els.timestampMessage.classList.add('is-error');
+          els.timestampField.classList.add('is-invalid');
+          els.timestampInput.setAttribute('aria-invalid', 'true');
+          els.timestampInput.focus();
+        }
+      });
+
+      /* ---------- 日期表单 ---------- */
+      function dateHint() {
+        if (selectedZone === 'utc') return '协调世界时 · UTC+00:00';
+        let date = new Date();
+        try { date = new Date(Number(parseDateForm() / million)); } catch (_) {}
+        return '本地时区 · ' + localZone + ' · ' + offsetString(date);
+      }
+
+      function clearDateError() {
+        setText(els.dateMessage, dateHint()); // 每次输入都会走这里，内容没变时不碰 DOM
+        els.dateMessage.classList.remove('is-error');
+        ['date', 'time'].forEach((name) => {
+          doc.getElementById(name + '-field').classList.remove('is-invalid');
+          doc.getElementById(name + '-input').setAttribute('aria-invalid', 'false');
+        });
+      }
+
+      function fillDate() {
+        const p = dateParts(new Date(), selectedZone === 'utc');
+        els.dateInput.value = `${pad(p.year, 4)}-${pad(p.month)}-${pad(p.day)}`;
+        els.timeInput.value = `${pad(p.hour)}:${pad(p.minute)}:${pad(p.second)}`;
+        clearDateError();
+      }
+
+      els.fillDate.addEventListener('click', fillDate, { passive: true });
+      els.dateInput.addEventListener('input', clearDateError, { passive: true });
+      els.timeInput.addEventListener('input', clearDateError, { passive: true });
+
+      els.dateZoneButtons.forEach((button) => {
+        button.addEventListener('click', () => {
+          selectedZone = button.dataset.zone;
+          els.dateZoneButtons.forEach((item) => item.setAttribute('aria-pressed', String(item === button)));
+          syncSeg(button.parentElement);
+          clearDateError();
+        }, { passive: true });
+      });
+
+      function parseDateForm() {
+        const dateValue = els.dateInput.value;
+        const timeValue = els.timeInput.value;
+        if (!dateValue) throw { message: '请选择一个有效日期。', field: 'date' };
+        if (!timeValue) throw { message: '请输入有效的 24 小时制时间。', field: 'time' };
+        const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateValue);
+        const timeMatch = /^(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(timeValue);
+        if (!dateMatch) throw { message: '日期范围为 0001-01-01 至 9999-12-31。', field: 'date' };
+        if (!timeMatch) throw { message: '请输入有效时间，精度为整秒。', field: 'time' };
+        const [, y, mo, d] = dateMatch.map(Number);
+        const hour = Number(timeMatch[1]);
+        const minute = Number(timeMatch[2]);
+        const second = Number(timeMatch[3] || 0);
+        if (y < 1 || y > 9999 || mo < 1 || mo > 12 || d < 1 || d > 31) throw { message: '请输入有效的年月日。', field: 'date' };
+        if (hour > 23 || minute > 59 || second > 59) throw { message: '时为 0-23，分和秒为 0-59。', field: 'time' };
+        const date = new Date(0);
+        if (selectedZone === 'utc') {
+          date.setUTCFullYear(y, mo - 1, d);
+          date.setUTCHours(hour, minute, second, 0);
+        } else {
+          date.setHours(12, 0, 0, 0);
+          date.setFullYear(y, mo - 1, d);
+          date.setHours(hour, minute, second, 0);
+        }
+        const p = dateParts(date, selectedZone === 'utc');
+        if (p.year !== y || p.month !== mo || p.day !== d) throw { message: '这个日期不存在，请检查月份与天数。', field: 'date' };
+        if (p.hour !== hour || p.minute !== minute || p.second !== second) {
+          throw { message: '该时间处于夏令时跳转区间，请选择其他时间或 UTC。', field: 'time' };
+        }
+        return BigInt(date.getTime()) * million;
+      }
+
+      els.dateForm.addEventListener('submit', (event) => {
+        event.preventDefault();
+        try {
+          const ns = parseDateForm();
+          clearDateError();
+          showResult(ns, 'timestamps', '来自日期 · ' + (selectedZone === 'utc' ? 'UTC 协调世界时' : localZone + ' 本地时间'));
+        } catch (error) {
+          els.dateMessage.textContent = error.message || '无法转换，请检查输入的日期与时间。';
+          els.dateMessage.classList.add('is-error');
+          const field = error.field || 'date';
+          doc.getElementById(field + '-field').classList.add('is-invalid');
+          doc.getElementById(field + '-input').setAttribute('aria-invalid', 'true');
+          doc.getElementById(field + '-input').focus();
+        }
+      });
+
+      /* ---------- 指南对话框（含对称的打开 / 关闭动画） ---------- */
+      let guideClosing = false;
+      let guideCloseTimer = null;
+      let guideGen = 0;
+      function openGuide() {
+        setSettings(false);
+        const g = els.guide;
+        if (g.open) return;
+        guideGen += 1;
+        clearTimeout(guideCloseTimer);
+        guideClosing = false;
+        g.classList.remove('is-closing');
+        g.showModal();
+        void g.offsetWidth;
+      }
+      function closeGuide() {
+        const g = els.guide;
+        if (!g.open || guideClosing) return;
+        if (reduceMotion.matches) {
+          g.close();
+          return;
+        }
+        guideGen += 1;
+        const ticket = guideGen;
+        guideClosing = true;
+        g.classList.add('is-closing');
+        clearTimeout(guideCloseTimer);
+        let done = false;
+        const finish = () => {
+          if (done || ticket !== guideGen) return;
+          if (!g.classList.contains('is-closing')) return;
+          done = true;
+          guideClosing = false;
+          g.classList.remove('is-closing');
+          if (g.open) g.close();
+        };
+        g.addEventListener('animationend', finish, { once: true });
+        guideCloseTimer = setTimeout(finish, 240);
+      }
+      ['open-guide', 'footer-guide'].forEach((id) => {
+        doc.getElementById(id).addEventListener('click', openGuide, { passive: true });
+      });
+      ['close-guide', 'guide-done'].forEach((id) => {
+        doc.getElementById(id).addEventListener('click', closeGuide, { passive: true });
+      });
+      els.guide.addEventListener('cancel', (event) => {
+        event.preventDefault();
+        closeGuide();
+      });
+      els.guide.addEventListener('close', () => {
+        guideClosing = false;
+        els.guide.classList.remove('is-closing');
+        clearTimeout(guideCloseTimer);
+      });
+      els.guide.addEventListener('click', (event) => {
+        if (event.target !== els.guide) return;
+        const rect = els.guide.getBoundingClientRect();
+        if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) closeGuide();
+      });
+
+      /* ---------- 轻量 ripple（同样不依赖固定坐标，键盘触发时回落到元素中心） ---------- */
+      doc.querySelectorAll('.ripple-target').forEach((button) => {
+        button.addEventListener('pointerdown', (event) => {
+          if (reduceMotion.matches) return;
+          const rect = button.getBoundingClientRect();
+          if (!rect.width && !rect.height) return;
+          const size = Math.max(rect.width, rect.height) * 2;
+          let x = event.clientX;
+          let y = event.clientY;
+          if (!Number.isFinite(x) || !Number.isFinite(y) || (x === 0 && y === 0)) {
+            x = rect.left + rect.width / 2;
+            y = rect.top + rect.height / 2;
+          }
+          const ripple = doc.createElement('span');
+          ripple.className = 'ripple';
+          ripple.style.width = ripple.style.height = size + 'px';
+          ripple.style.left = x - rect.left - size / 2 + 'px';
+          ripple.style.top = y - rect.top - size / 2 + 'px';
+          button.appendChild(ripple);
+          ripple.addEventListener('animationend', () => ripple.remove(), { once: true });
+          setTimeout(() => ripple.remove(), 700);
+        }, { passive: true });
+      });
+
+      /* ---------- 初始化 ---------- */
+      updateTheme();
+      fillTimestamp();
+      fillDate();
+      try {
+        currentResult = buildResult(parseTimestamp(els.timestampInput.value, 's').ns);
+      } catch (_) {
+        currentResult = buildResult(BigInt(Math.floor(Date.now() / 1000)) * billion);
+      }
+      renderResults();
+      syncAllSegs();
+    })();
+  </script>
+</body>
+</html>
