@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#f7f9f3">
+  <meta name="theme-color" content="#f8faf5">
   <meta name="description" content="一个简洁的 Unix 时间戳转换工具。支持秒、毫秒、微秒、纳秒，本地时间与 UTC，以及个性化 Material You 主题。所有计算均在浏览器中完成。">
   <title>晓刻 · Unix 时间戳转换器</title>
   <script>
@@ -235,6 +235,7 @@
       right: 0;
       top: 57px;
       width: 332px;
+      max-width: calc(100vw - 32px);
       padding: 22px;
       background: var(--card);
       border: 1px solid var(--outline);
@@ -476,6 +477,7 @@
       height: 100%;
       padding: 25px 15px 9px;
       border: 0;
+      outline: 0;
       border-radius: inherit;
       background: transparent;
       color: var(--text);
@@ -713,6 +715,8 @@
     dialog {
       width: min(480px, calc(100% - 32px));
       max-height: 85dvh;
+      overflow-y: auto;
+      overscroll-behavior: contain;
       margin: auto;
       padding: 30px;
       background: var(--card);
@@ -903,6 +907,9 @@
       transition-property: background-color, color, border-color, box-shadow, fill, stroke !important;
       transition-duration: 0.4s !important;
       transition-timing-function: cubic-bezier(0.2, 0, 0, 1) !important;
+    }
+    html.theme-animating .seg.seg-animate::before {
+      transition-property: transform, width, height, background-color, box-shadow !important;
     }
 
     @media (max-width: 1000px) {
@@ -1104,7 +1111,7 @@
         <div class="field timestamp-field" id="timestamp-field">
           <label class="field-label" for="timestamp-input">Unix 时间戳</label>
           <input id="timestamp-input" type="text" inputmode="decimal" placeholder="例如 1735689600" maxlength="64" autocomplete="off" spellcheck="false" aria-describedby="timestamp-message" aria-invalid="false">
-          <button class="icon-button clear-input" id="clear-timestamp" type="button" aria-label="清空时间戳" title="清空"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
+          <button class="icon-button clear-input" id="clear-timestamp" type="button" aria-label="清空时间戳" title="清空" hidden><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
         </div>
         <div class="form-option-row">
           <div class="unit-option">
@@ -1203,9 +1210,11 @@
       // 缓存 DOM 引用，减少重复查询开销
       const els = {
         root,
+        themeMeta: doc.querySelector('meta[name="theme-color"]'),
         themeToggle: $('theme-toggle'),
         paletteButton: $('palette-button'),
         settingsPanel: $('theme-settings'),
+        modeGroup: doc.querySelector('.mode-options.seg'),
         livePanel: doc.querySelector('.live-panel'),
         liveValue: $('live-value'),
         liveDate: $('live-date'),
@@ -1227,10 +1236,13 @@
         dateMessage: $('date-message'),
         fillDate: $('fill-date'),
         resultsSection: $('results-section'),
+        resultsPanel: $('results-panel'),
         resultsBody: $('results-body'),
         resultSource: $('result-source'),
         resultFootnote: $('result-footnote'),
         copyAll: $('copy-all'),
+        tabDates: $('tab-dates'),
+        tabTimestamps: $('tab-timestamps'),
         resultTabs: doc.querySelectorAll('[data-result-tab]'),
         dateZoneButtons: doc.querySelectorAll('[data-zone]'),
         liveUnitButtons: doc.querySelectorAll('[data-live-unit]'),
@@ -1249,7 +1261,9 @@
         if (!hiddenCopy) {
           hiddenCopy = doc.createElement('textarea');
           hiddenCopy.setAttribute('readonly', '');
-          hiddenCopy.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;font-size:16px;width:1px;height:1px';
+          hiddenCopy.setAttribute('aria-hidden', 'true');
+          hiddenCopy.tabIndex = -1;
+          hiddenCopy.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;font-size:16px;width:1px;height:1px;pointer-events:none';
           doc.body.appendChild(hiddenCopy);
         }
         return hiddenCopy;
@@ -1268,8 +1282,11 @@
 
       const unitNames = { s: '秒', ms: '毫秒', us: '微秒', ns: '纳秒' };
       const unitPowers = { s: 9, ms: 6, us: 3, ns: 0 };
+      const unitFactors = { s: 1000000000n, ms: 1000000n, us: 1000n, ns: 1n };
       const billion = 1000000000n;
       const million = 1000000n;
+      const maxNs = 8640000000000000n * million;
+      const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
 
       let localZone = '本地时区';
       try { localZone = Intl.DateTimeFormat().resolvedOptions().timeZone || localZone; } catch (_) {}
@@ -1277,6 +1294,7 @@
       let storedMode = 'light';
       try { storedMode = localStorage.getItem('shike-mode') || 'light'; } catch (_) {}
       let mode = ['light', 'dark', 'system'].includes(storedMode) ? storedMode : 'light';
+      let color = ['sage', 'iris', 'blue', 'apricot', 'rose'].includes(root.dataset.color) ? root.dataset.color : 'sage';
 
       let liveUnit = 's';
       let livePaused = false;
@@ -1354,9 +1372,14 @@
       let vtGeometry = null;
       const VT_DURATION = 520;
 
+      function isDarkMode() {
+        return mode === 'dark' || (mode === 'system' && darkPreference.matches);
+      }
+
       function updateTheme() {
-        const dark = mode === 'dark' || (mode === 'system' && darkPreference.matches);
+        const dark = isDarkMode();
         root.dataset.theme = dark ? 'dark' : 'light';
+        root.dataset.color = color;
         const label = dark ? '切换到浅色模式' : '切换到深色模式';
         els.themeToggle.setAttribute('aria-label', label);
         els.themeToggle.title = label;
@@ -1366,9 +1389,9 @@
           button.setAttribute('aria-pressed', String(button.dataset.mode === mode));
         });
         els.colorChoices.forEach((button) => {
-          button.setAttribute('aria-pressed', String(button.dataset.color === root.dataset.color));
+          button.setAttribute('aria-pressed', String(button.dataset.color === color));
         });
-        syncSeg(els.modeButtons[0] && els.modeButtons[0].parentElement);
+        syncSeg(els.modeGroup);
         scheduleMeta();
       }
 
@@ -1378,8 +1401,7 @@
          它们若发生在新旧画面截图阶段，会直接拖慢扩散动画的第一帧。 */
       let metaFrame = 0;
       function syncMetaTheme() {
-        const meta = doc.querySelector('meta[name="theme-color"]');
-        if (meta) meta.content = getComputedStyle(root).getPropertyValue('--surface').trim();
+        if (els.themeMeta) els.themeMeta.content = getComputedStyle(root).getPropertyValue('--surface').trim();
       }
       function scheduleMeta() {
         if (vtBusy) return; // 揭示结束后统一同步
@@ -1391,7 +1413,7 @@
       function persistTheme() {
         persistTimer = 0;
         savePreference('shike-mode', mode);
-        savePreference('shike-color', root.dataset.color);
+        savePreference('shike-color', color);
       }
       function schedulePersist() {
         clearTimeout(persistTimer);
@@ -1451,7 +1473,7 @@
         // 与伪元素盒子尺寸解耦，缩放 / DPR / 快照尺寸差异都不会让它停在半路。
         const reference = Math.hypot(width, height) / Math.SQRT2;
         const needed = Math.hypot(Math.max(x, width - x), Math.max(y, height - y));
-        const radius = Math.min(140, (needed / reference) * 100 * 1.03);
+        const radius = Math.min(146, (needed / reference) * 100 * 1.03);
         return {
           x: ((x / width) * 100).toFixed(3),
           y: ((y / height) * 100).toFixed(3),
@@ -1489,7 +1511,6 @@
       }
 
       function withThemeTransition(update, originEl, originEvent) {
-        schedulePersist();
         if (reduceMotion.matches) {
           update();
           return;
@@ -1528,29 +1549,26 @@
       }
 
       els.themeToggle.addEventListener('click', (event) => {
-        withThemeTransition(() => {
-          mode = root.dataset.theme === 'dark' ? 'light' : 'dark';
-          updateTheme();
-        }, els.themeToggle, event);
+        mode = isDarkMode() ? 'light' : 'dark';
+        schedulePersist();
+        withThemeTransition(updateTheme, els.themeToggle, event);
       }, { passive: true });
 
       els.modeButtons.forEach((button) => {
         button.addEventListener('click', (event) => {
           if (mode === button.dataset.mode) return;
-          withThemeTransition(() => {
-            mode = button.dataset.mode;
-            updateTheme();
-          }, button, event);
+          mode = button.dataset.mode;
+          schedulePersist();
+          withThemeTransition(updateTheme, button, event);
         }, { passive: true });
       });
 
       els.colorChoices.forEach((button) => {
         button.addEventListener('click', (event) => {
-          if (root.dataset.color === button.dataset.color) return;
-          withThemeTransition(() => {
-            root.dataset.color = button.dataset.color;
-            updateTheme();
-          }, button.querySelector('.color-dot') || button, event);
+          if (color === button.dataset.color) return;
+          color = button.dataset.color;
+          schedulePersist();
+          withThemeTransition(updateTheme, button.querySelector('.color-dot') || button, event);
         }, { passive: true });
       });
 
@@ -1564,11 +1582,17 @@
         const panel = els.settingsPanel;
         if (open) {
           if (!panel.hidden && !panel.classList.contains('is-closing')) return;
+          const wasHidden = panel.hidden;
           settingsGen += 1;
           clearTimeout(settingsCloseTimer);
           panel.classList.remove('is-closing');
           panel.hidden = false;
           els.paletteButton.setAttribute('aria-expanded', 'true');
+          if (wasHidden && els.modeGroup) {
+            els.modeGroup.classList.remove('seg-animate');
+            syncSeg(els.modeGroup);
+            requestAnimationFrame(() => requestAnimationFrame(() => els.modeGroup.classList.add('seg-animate')));
+          }
           void panel.offsetWidth;
           const active = panel.querySelector('.color-choice[aria-pressed="true"]');
           if (active) active.focus();
@@ -1585,7 +1609,11 @@
           panel.classList.add('is-closing');
           clearTimeout(settingsCloseTimer);
           let done = false;
+          const onAnimEnd = (event) => {
+            if (event.target === panel) finish();
+          };
           const finish = () => {
+            panel.removeEventListener('animationend', onAnimEnd);
             if (done || ticket !== settingsGen) return;
             if (!panel.classList.contains('is-closing')) return;
             done = true;
@@ -1593,7 +1621,7 @@
             panel.classList.remove('is-closing');
             if (returnFocus) els.paletteButton.focus();
           };
-          panel.addEventListener('animationend', finish, { once: true });
+          panel.addEventListener('animationend', onAnimEnd);
           settingsCloseTimer = setTimeout(finish, 220);
         }
       }
@@ -1610,7 +1638,10 @@
       }, { passive: true });
 
       doc.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape' && !els.settingsPanel.hidden) setSettings(false, true);
+        if (event.key === 'Escape' && !els.settingsPanel.hidden) {
+          event.preventDefault();
+          setSettings(false, true);
+        }
       });
 
       doc.addEventListener('focusin', (event) => {
@@ -1623,8 +1654,17 @@
         return year >= 0 && year <= 9999 ? pad(year, 4) : (year < 0 ? '-' : '+') + pad(Math.abs(year), 6);
       }
       function offsetString(date) {
-        const offset = -date.getTimezoneOffset();
-        return 'UTC' + (offset >= 0 ? '+' : '-') + pad(Math.floor(Math.abs(offset) / 60)) + ':' + pad(Math.abs(offset) % 60);
+        const approx = -date.getTimezoneOffset() * 60;
+        let totalSeconds =
+          (date.getHours() * 3600 + date.getMinutes() * 60 + date.getSeconds()) -
+          (date.getUTCHours() * 3600 + date.getUTCMinutes() * 60 + date.getUTCSeconds());
+        if (totalSeconds - approx > 43200) totalSeconds -= 86400;
+        else if (totalSeconds - approx < -43200) totalSeconds += 86400;
+        const abs = Math.abs(totalSeconds);
+        const hours = pad(Math.floor(abs / 3600));
+        const minutes = pad(Math.floor((abs % 3600) / 60));
+        const seconds = abs % 60;
+        return 'UTC' + (totalSeconds >= 0 ? '+' : '-') + hours + ':' + minutes + (seconds ? ':' + pad(seconds) : '');
       }
       function dateParts(date, utc = false) {
         const prefix = utc ? 'getUTC' : 'get';
@@ -1642,18 +1682,29 @@
         return `${yearString(p.year)}-${pad(p.month)}-${pad(p.day)} ${pad(p.hour)}:${pad(p.minute)}:${pad(p.second)}` + (fraction ? '.' + fraction : '');
       }
 
-      /* ---------- 实时计时器（优化：按需定时，避免 83ms 高频） ---------- */
+      /* ---------- 实时计时器（优化：按需定时，整秒对齐） ---------- */
       let liveTimer = null;
       let liveVisible = true; // 实时区块是否在视口内；滚出视口后没有必要继续以 100ms 频率刷新
+      function clearLiveTimer() {
+        if (!liveTimer) return;
+        clearInterval(liveTimer);
+        clearTimeout(liveTimer);
+        liveTimer = null;
+      }
       function scheduleLive() {
-        if (liveTimer) {
-          clearInterval(liveTimer);
-          liveTimer = null;
-        }
+        clearLiveTimer();
         if (livePaused || doc.hidden || !liveVisible) return;
-        const interval = liveUnit === 'ms' ? 100 : 1000;
-        liveTimer = setInterval(() => renderLive(), interval);
         renderLive();
+        if (liveUnit === 'ms') {
+          liveTimer = setInterval(() => renderLive(), 100);
+        } else {
+          const tickSecond = () => {
+            renderLive();
+            if (livePaused || doc.hidden || !liveVisible || liveUnit !== 's') return;
+            liveTimer = setTimeout(tickSecond, 1000 - (Date.now() % 1000));
+          };
+          liveTimer = setTimeout(tickSecond, 1000 - (Date.now() % 1000));
+        }
       }
       if ('IntersectionObserver' in window) {
         new IntersectionObserver((entries) => {
@@ -1675,7 +1726,7 @@
         if (second !== lastLiveSecond || force) {
           const date = new Date(liveNow);
           const p = dateParts(date);
-          const weekday = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][date.getDay()];
+          const weekday = weekdays[date.getDay()];
           setText(els.liveDate, `${p.year} 年 ${pad(p.month)} 月 ${pad(p.day)} 日 ${weekday}  ${pad(p.hour)}:${pad(p.minute)}:${pad(p.second)}  ·  ${offsetString(date)}`);
           lastLiveSecond = second;
         }
@@ -1683,11 +1734,13 @@
 
       els.liveUnitButtons.forEach((button) => {
         button.addEventListener('click', () => {
+          if (liveUnit === button.dataset.liveUnit) return;
           liveUnit = button.dataset.liveUnit;
           els.liveUnitButtons.forEach((item) => item.setAttribute('aria-pressed', String(item === button)));
           syncSeg(button.parentElement);
           els.liveValue.classList.toggle('is-milliseconds', liveUnit === 'ms');
-          scheduleLive();
+          if (livePaused) renderLive();
+          else scheduleLive();
         }, { passive: true });
       });
 
@@ -1737,8 +1790,7 @@
             if (use) use.setAttribute('href', '#i-check');
             button.classList.add('is-copied');
             copyTimers.set(button, setTimeout(() => {
-              const use2 = button.querySelector('use');
-              if (use2) use2.setAttribute('href', '#i-copy');
+              if (use) use.setAttribute('href', '#i-copy');
               button.classList.remove('is-copied');
               copyTimers.delete(button);
             }, 1600));
@@ -1757,8 +1809,10 @@
       }
 
       els.copyLive.addEventListener('click', () => {
+        if (!livePaused) liveNow = Date.now();
         renderLive(); // 区块在视口外时计时器是停的，复制前先刷新一次，保证复制到的是最新值
-        copyText(els.liveValue.textContent, '当前时间戳已复制', els.copyLive);
+        const text = String(liveUnit === 's' ? Math.floor(liveNow / 1000) : liveNow);
+        copyText(text, '当前时间戳已复制', els.copyLive);
       }, { passive: true });
 
       /* ---------- 时间戳解析 ---------- */
@@ -1770,7 +1824,7 @@
         const negative = nanoseconds < 0n;
         const absolute = negative ? -nanoseconds : nanoseconds;
         const power = unitPowers[unit];
-        const factor = 10n ** BigInt(power);
+        const factor = unitFactors[unit];
         const integer = absolute / factor;
         const remainder = absolute % factor;
         let value = integer.toString();
@@ -1792,12 +1846,10 @@
         const power = unitPowers[unit];
         if (fractional.slice(power).replace(/0/g, '')) throw new Error('小数精度超出纳秒，请减少小数位数。');
         const fraction = fractional.slice(0, power).padEnd(power, '0');
-        let ns = BigInt(integer) * (10n ** BigInt(power)) + BigInt(fraction || '0');
+        let ns = BigInt(integer) * unitFactors[unit] + BigInt(fraction || '0');
         if (negative) ns = -ns;
-        const ms = floorDivide(ns, million);
-        if (ms < -8640000000000000n || ms > 8640000000000000n) throw new Error('超出可转换的日期范围，请检查时间单位。');
-        if (ns > 8640000000000000n * million) throw new Error('超出可转换的日期范围，请检查时间单位。');
-        return { ns, unit, date: new Date(Number(ms)) };
+        if (ns < -maxNs || ns > maxNs) throw new Error('超出可转换的日期范围，请检查时间单位。');
+        return { ns, unit };
       }
 
       function buildResult(ns) {
@@ -1805,14 +1857,15 @@
         const fraction = ((ns % billion + billion) % billion).toString().padStart(9, '0').replace(/0+$/, '');
         const isoFraction = fraction.padEnd(3, '0');
         const iso = date.toISOString().split('.')[0] + '.' + isoFraction + 'Z';
+        const offset = offsetString(date);
         return {
           ns,
           dates: [
-            { label: '本地时间', note: offsetString(date), value: humanDate(date, false, fraction) + '  ' + offsetString(date) },
-            { label: 'UTC 时间', note: 'UTC+00:00', value: humanDate(date, true, fraction) + '  UTC' },
-            { label: 'ISO 8601', note: '', value: iso },
-            { label: 'RFC 2822', note: '', value: date.toUTCString().replace('GMT', '+0000') },
-            { label: 'RFC 3339', note: '', value: iso.replace(/Z$/, '+00:00') }
+            { label: '本地时间', value: humanDate(date, false, fraction) + '  ' + offset },
+            { label: 'UTC 时间', value: humanDate(date, true, fraction) + '  UTC' },
+            { label: 'ISO 8601', value: iso },
+            { label: 'RFC 2822', value: date.toUTCString().replace('GMT', '+0000') },
+            { label: 'RFC 3339', value: iso.replace(/Z$/, '+00:00') }
           ],
           timestamps: ['s', 'ms', 'us', 'ns'].map((unit) => ({ label: 'Unix ' + unitNames[unit], note: unit, value: epochString(ns, unit) }))
         };
@@ -1835,7 +1888,7 @@
         body.replaceChildren();
         const rows = currentResult[resultTab];
         const fragment = doc.createDocumentFragment();
-        rows.forEach((row) => {
+        rows.forEach((row, index) => {
           const tr = doc.createElement('tr');
           const label = doc.createElement('td');
           label.textContent = row.label;
@@ -1852,10 +1905,10 @@
           const button = doc.createElement('button');
           button.type = 'button';
           button.className = 'icon-button row-copy';
+          button.dataset.rowIndex = String(index);
           button.setAttribute('aria-label', '复制' + row.label);
           button.title = '复制' + row.label;
           button.appendChild(makeIcon('copy'));
-          button.addEventListener('click', () => copyText(row.value, row.label + '已复制', button), { passive: true });
           action.appendChild(button);
           tr.append(label, value, action);
           fragment.appendChild(tr);
@@ -1868,7 +1921,7 @@
           button.tabIndex = active ? 0 : -1;
         });
         if (els.resultTabs[0]) syncSeg(els.resultTabs[0].parentElement);
-        doc.getElementById('results-panel').setAttribute('aria-labelledby', resultTab === 'dates' ? 'tab-dates' : 'tab-timestamps');
+        els.resultsPanel.setAttribute('aria-labelledby', resultTab === 'dates' ? 'tab-dates' : 'tab-timestamps');
         setText(els.resultFootnote, resultTab === 'dates'
           ? 'Unix 时间戳不受时区影响。本地时间根据你的设备时区显示。'
           : '各单位均保留原始精度。微秒与纳秒使用 BigInt 计算，不丢失大整数精度。');
@@ -1888,17 +1941,27 @@
         }
       }
 
+      els.resultsBody.addEventListener('click', (event) => {
+        const button = event.target.closest('.row-copy');
+        if (!button || !currentResult) return;
+        const row = currentResult[resultTab][Number(button.dataset.rowIndex)];
+        if (row) copyText(row.value, row.label + '已复制', button);
+      }, { passive: true });
+
       els.resultTabs.forEach((button) => {
         button.addEventListener('click', () => {
+          if (resultTab === button.dataset.resultTab) return;
           resultTab = button.dataset.resultTab;
           renderResults(true);
         }, { passive: true });
         button.addEventListener('keydown', (event) => {
           if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
           event.preventDefault();
-          resultTab = event.key === 'Home' ? 'dates' : event.key === 'End' ? 'timestamps' : resultTab === 'dates' ? 'timestamps' : 'dates';
+          const nextTab = event.key === 'Home' ? 'dates' : event.key === 'End' ? 'timestamps' : resultTab === 'dates' ? 'timestamps' : 'dates';
+          if (nextTab === resultTab) return;
+          resultTab = nextTab;
           renderResults(true);
-          doc.getElementById(resultTab === 'dates' ? 'tab-dates' : 'tab-timestamps').focus();
+          (resultTab === 'dates' ? els.tabDates : els.tabTimestamps).focus();
         });
       });
 
@@ -1937,9 +2000,9 @@
         els.timestampInput.focus();
       }, { passive: true });
 
-      function fillTimestamp() {
+      function fillTimestamp(now = Date.now()) {
         const unit = els.timestampUnit.value === 'auto' ? 's' : els.timestampUnit.value;
-        const ns = unit === 's' ? BigInt(Math.floor(Date.now() / 1000)) * billion : BigInt(Date.now()) * million;
+        const ns = unit === 's' ? BigInt(Math.floor(now / 1000)) * billion : BigInt(now) * million;
         els.timestampInput.value = epochString(ns, unit);
         clearTimestampError();
       }
@@ -1969,32 +2032,35 @@
       function dateHint() {
         if (selectedZone === 'utc') return '协调世界时 · UTC+00:00';
         let date = new Date();
-        try { date = new Date(Number(parseDateForm() / million)); } catch (_) {}
+        try { date = parseDateObject(); } catch (_) {}
         return '本地时区 · ' + localZone + ' · ' + offsetString(date);
       }
 
       function clearDateError() {
         setText(els.dateMessage, dateHint()); // 每次输入都会走这里，内容没变时不碰 DOM
         els.dateMessage.classList.remove('is-error');
-        ['date', 'time'].forEach((name) => {
-          doc.getElementById(name + '-field').classList.remove('is-invalid');
-          doc.getElementById(name + '-input').setAttribute('aria-invalid', 'false');
-        });
+        els.dateField.classList.remove('is-invalid');
+        els.timeField.classList.remove('is-invalid');
+        els.dateInput.setAttribute('aria-invalid', 'false');
+        els.timeInput.setAttribute('aria-invalid', 'false');
       }
 
-      function fillDate() {
-        const p = dateParts(new Date(), selectedZone === 'utc');
+      function fillDate(now = Date.now()) {
+        const p = dateParts(new Date(now), selectedZone === 'utc');
         els.dateInput.value = `${pad(p.year, 4)}-${pad(p.month)}-${pad(p.day)}`;
         els.timeInput.value = `${pad(p.hour)}:${pad(p.minute)}:${pad(p.second)}`;
         clearDateError();
       }
 
-      els.fillDate.addEventListener('click', fillDate, { passive: true });
+      els.fillDate.addEventListener('click', () => fillDate(), { passive: true });
       els.dateInput.addEventListener('input', clearDateError, { passive: true });
+      els.dateInput.addEventListener('change', clearDateError, { passive: true });
       els.timeInput.addEventListener('input', clearDateError, { passive: true });
+      els.timeInput.addEventListener('change', clearDateError, { passive: true });
 
       els.dateZoneButtons.forEach((button) => {
         button.addEventListener('click', () => {
+          if (selectedZone === button.dataset.zone) return;
           selectedZone = button.dataset.zone;
           els.dateZoneButtons.forEach((item) => item.setAttribute('aria-pressed', String(item === button)));
           syncSeg(button.parentElement);
@@ -2002,11 +2068,25 @@
         }, { passive: true });
       });
 
-      function parseDateForm() {
+      function parseDateObject() {
         const dateValue = els.dateInput.value;
         const timeValue = els.timeInput.value;
-        if (!dateValue) throw { message: '请选择一个有效日期。', field: 'date' };
-        if (!timeValue) throw { message: '请输入有效的 24 小时制时间。', field: 'time' };
+        if (!dateValue) {
+          throw {
+            message: els.dateInput.validity && els.dateInput.validity.badInput
+              ? '这个日期不存在，请检查月份与天数。'
+              : '请选择一个有效日期。',
+            field: 'date'
+          };
+        }
+        if (!timeValue) {
+          throw {
+            message: els.timeInput.validity && els.timeInput.validity.badInput
+              ? '请输入有效时间，精度为整秒。'
+              : '请输入有效的 24 小时制时间。',
+            field: 'time'
+          };
+        }
         const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateValue);
         const timeMatch = /^(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(timeValue);
         if (!dateMatch) throw { message: '日期范围为 0001-01-01 至 9999-12-31。', field: 'date' };
@@ -2017,21 +2097,28 @@
         const second = Number(timeMatch[3] || 0);
         if (y < 1 || y > 9999 || mo < 1 || mo > 12 || d < 1 || d > 31) throw { message: '请输入有效的年月日。', field: 'date' };
         if (hour > 23 || minute > 59 || second > 59) throw { message: '时为 0-23，分和秒为 0-59。', field: 'time' };
-        const date = new Date(0);
-        if (selectedZone === 'utc') {
-          date.setUTCFullYear(y, mo - 1, d);
-          date.setUTCHours(hour, minute, second, 0);
-        } else {
-          date.setHours(12, 0, 0, 0);
-          date.setFullYear(y, mo - 1, d);
-          date.setHours(hour, minute, second, 0);
+        const utcCheck = new Date(0);
+        utcCheck.setUTCFullYear(y, mo - 1, d);
+        if (utcCheck.getUTCFullYear() !== y || utcCheck.getUTCMonth() + 1 !== mo || utcCheck.getUTCDate() !== d) {
+          throw { message: '这个日期不存在，请检查月份与天数。', field: 'date' };
         }
-        const p = dateParts(date, selectedZone === 'utc');
-        if (p.year !== y || p.month !== mo || p.day !== d) throw { message: '这个日期不存在，请检查月份与天数。', field: 'date' };
-        if (p.hour !== hour || p.minute !== minute || p.second !== second) {
+        if (selectedZone === 'utc') {
+          utcCheck.setUTCHours(hour, minute, second, 0);
+          return utcCheck;
+        }
+        const date = new Date(0);
+        date.setHours(12, 0, 0, 0);
+        date.setFullYear(y, mo - 1, d);
+        date.setHours(hour, minute, second, 0);
+        const p = dateParts(date, false);
+        if (p.year !== y || p.month !== mo || p.day !== d || p.hour !== hour || p.minute !== minute || p.second !== second) {
           throw { message: '该时间处于夏令时跳转区间，请选择其他时间或 UTC。', field: 'time' };
         }
-        return BigInt(date.getTime()) * million;
+        return date;
+      }
+
+      function parseDateForm() {
+        return BigInt(parseDateObject().getTime()) * million;
       }
 
       els.dateForm.addEventListener('submit', (event) => {
@@ -2041,12 +2128,18 @@
           clearDateError();
           showResult(ns, 'timestamps', '来自日期 · ' + (selectedZone === 'utc' ? 'UTC 协调世界时' : localZone + ' 本地时间'));
         } catch (error) {
+          els.dateField.classList.remove('is-invalid');
+          els.timeField.classList.remove('is-invalid');
+          els.dateInput.setAttribute('aria-invalid', 'false');
+          els.timeInput.setAttribute('aria-invalid', 'false');
           els.dateMessage.textContent = error.message || '无法转换，请检查输入的日期与时间。';
           els.dateMessage.classList.add('is-error');
-          const field = error.field || 'date';
-          doc.getElementById(field + '-field').classList.add('is-invalid');
-          doc.getElementById(field + '-input').setAttribute('aria-invalid', 'true');
-          doc.getElementById(field + '-input').focus();
+          const isTime = error.field === 'time';
+          const fieldEl = isTime ? els.timeField : els.dateField;
+          const inputEl = isTime ? els.timeInput : els.dateInput;
+          fieldEl.classList.add('is-invalid');
+          inputEl.setAttribute('aria-invalid', 'true');
+          inputEl.focus();
         }
       });
 
@@ -2054,6 +2147,7 @@
       let guideClosing = false;
       let guideCloseTimer = null;
       let guideGen = 0;
+      let guideBackdropDown = false;
       function openGuide() {
         setSettings(false);
         const g = els.guide;
@@ -2078,7 +2172,11 @@
         g.classList.add('is-closing');
         clearTimeout(guideCloseTimer);
         let done = false;
+        const onAnimEnd = (event) => {
+          if (event.target === g) finish();
+        };
         const finish = () => {
+          g.removeEventListener('animationend', onAnimEnd);
           if (done || ticket !== guideGen) return;
           if (!g.classList.contains('is-closing')) return;
           done = true;
@@ -2086,7 +2184,7 @@
           g.classList.remove('is-closing');
           if (g.open) g.close();
         };
-        g.addEventListener('animationend', finish, { once: true });
+        g.addEventListener('animationend', onAnimEnd);
         guideCloseTimer = setTimeout(finish, 240);
       }
       ['open-guide', 'footer-guide'].forEach((id) => {
@@ -2104,8 +2202,17 @@
         els.guide.classList.remove('is-closing');
         clearTimeout(guideCloseTimer);
       });
+      els.guide.addEventListener('pointerdown', (event) => {
+        if (event.target !== els.guide) {
+          guideBackdropDown = false;
+          return;
+        }
+        const rect = els.guide.getBoundingClientRect();
+        guideBackdropDown = event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom;
+      }, { passive: true });
       els.guide.addEventListener('click', (event) => {
-        if (event.target !== els.guide) return;
+        if (!guideBackdropDown || event.target !== els.guide) return;
+        guideBackdropDown = false;
         const rect = els.guide.getBoundingClientRect();
         if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) closeGuide();
       });
@@ -2113,7 +2220,7 @@
       /* ---------- 轻量 ripple（同样不依赖固定坐标，键盘触发时回落到元素中心） ---------- */
       doc.querySelectorAll('.ripple-target').forEach((button) => {
         button.addEventListener('pointerdown', (event) => {
-          if (reduceMotion.matches) return;
+          if (reduceMotion.matches || event.button > 0 || button.disabled) return;
           const rect = button.getBoundingClientRect();
           if (!rect.width && !rect.height) return;
           const size = Math.max(rect.width, rect.height) * 2;
@@ -2129,19 +2236,22 @@
           ripple.style.left = x - rect.left - size / 2 + 'px';
           ripple.style.top = y - rect.top - size / 2 + 'px';
           button.appendChild(ripple);
-          ripple.addEventListener('animationend', () => ripple.remove(), { once: true });
-          setTimeout(() => ripple.remove(), 700);
+          const timer = setTimeout(() => ripple.remove(), 700);
+          ripple.addEventListener('animationend', () => {
+            clearTimeout(timer);
+            ripple.remove();
+          }, { once: true });
         }, { passive: true });
       });
 
       /* ---------- 初始化 ---------- */
       updateTheme();
-      fillTimestamp();
-      fillDate();
+      fillTimestamp(liveNow);
+      fillDate(liveNow);
       try {
         currentResult = buildResult(parseTimestamp(els.timestampInput.value, 's').ns);
       } catch (_) {
-        currentResult = buildResult(BigInt(Math.floor(Date.now() / 1000)) * billion);
+        currentResult = buildResult(BigInt(Math.floor(liveNow / 1000)) * billion);
       }
       renderResults();
       syncAllSegs();
