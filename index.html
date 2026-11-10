@@ -2016,18 +2016,16 @@
         let entry = rowPool[index];
         if (entry) return entry;
         const tr = doc.createElement('tr');
+        // 文本统一经 setText 写到元素上，不缓存文本节点：网页翻译等外部工具会替换文本节点，
+        // 缓存的节点一旦脱离文档，之后的更新就再也显示不出来。
         const labelTd = doc.createElement('td');
-        const labelText = doc.createTextNode('');
+        const labelSpan = doc.createElement('span');
         const noteSpan = doc.createElement('span');
-        const noteText = doc.createTextNode('');
         noteSpan.className = 'format-note';
         noteSpan.hidden = true;
-        noteSpan.appendChild(noteText);
-        labelTd.append(labelText, noteSpan);
+        labelTd.append(labelSpan, noteSpan);
         const valueTd = doc.createElement('td');
-        const valueText = doc.createTextNode('');
         valueTd.className = 'result-value';
-        valueTd.appendChild(valueText);
         const actionTd = doc.createElement('td');
         const button = doc.createElement('button');
         button.type = 'button';
@@ -2037,7 +2035,7 @@
         actionTd.appendChild(button);
         tr.append(labelTd, valueTd, actionTd);
         els.resultsBody.appendChild(tr);
-        entry = { tr, labelText, noteSpan, noteText, valueTd, valueText, button, label: '', note: '', value: '' };
+        entry = { tr, labelSpan, noteSpan, valueTd, button, label: '', note: '', value: '' };
         rowPool[index] = entry;
         return entry;
       }
@@ -2058,7 +2056,7 @@
           const entry = getRowEntry(i);
           entry.tr.hidden = false;
           if (entry.label !== row.label) {
-            entry.labelText.data = row.label;
+            setText(entry.labelSpan, row.label);
             const copyLabel = '复制' + row.label;
             entry.button.setAttribute('aria-label', copyLabel);
             entry.button.title = copyLabel;
@@ -2067,12 +2065,12 @@
           const note = showNote && row.note ? row.note : '';
           if (entry.note !== note) {
             entry.noteSpan.hidden = !note;
-            if (note) entry.noteText.data = note;
+            if (note) setText(entry.noteSpan, note);
             entry.note = note;
           }
           if (entry.value !== row.value || lastRenderedTab !== resultTab) {
             resetCopyButton(entry.button);
-            entry.valueText.data = row.value;
+            setText(entry.valueTd, row.value);
             entry.value = row.value;
           }
         }
