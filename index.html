@@ -1205,7 +1205,7 @@
     <section class="guide-section"><h3>Unix 时间戳是什么？</h3><p>它表示从 1970 年 1 月 1 日 00:00:00 UTC 起经过的时间，不包含闰秒。时间戳本身与时区无关，负数表示这个起点之前的时刻。</p></section>
     <section class="guide-section"><h3>该选择哪一种单位？</h3><p>自动模式会按整数部分的位数判断常见时间戳。早期日期、很远的未来或较小的数值可能存在歧义，这时请手动选择单位。</p><div class="unit-guide"><div><code>s</code>秒 · 通常 10 位</div><div><code>ms</code>毫秒 · 通常 13 位</div><div><code>us</code>微秒 · 通常 16 位</div><div><code>ns</code>纳秒 · 通常 19 位</div></div></section>
     <section class="guide-section"><h3>本地时间与 UTC 有何不同？</h3><p>本地时间使用设备时区，并自动处理夏令时；UTC 是协调世界时。日期表单中的时区决定输入时间的含义，转换结果会同时展示这两种表达。</p></section>
-    <section class="guide-section"><h3>精度与隐私</h3><p>使用 BigInt 保留纳秒精度。ISO 8601 与 RFC 3339 保留小数秒，RFC 2822 仅显示整秒。所有转换与复制均在本地完成，主题偏好保存在你的浏览器中。</p></section>
+    <section class="guide-section"><h3>精度与隐私</h3><p>使用 BigInt 保留纳秒精度。ISO 8601 与 RFC 3339 保留小数秒，RFC 2822 仅显示整秒。RFC 2822 适用于 1900 年及以后，RFC 3339 适用于 0000–9999 年；不适用的格式会说明原因，且不参与复制。所有转换与复制均在本地完成，主题偏好保存在你的浏览器中。</p></section>
     <button class="primary-button dialog-done ripple-target" id="guide-done" type="button">明白了<svg class="icon" aria-hidden="true"><use href="#i-check"/></svg></button>
   </dialog>
 
@@ -1980,6 +1980,9 @@
 
       function buildResult(ns) {
         const date = new Date(Number(floorDivide(ns, million)));
+        const year = date.getUTCFullYear();
+        const supportsRfc2822 = year >= 1900;
+        const supportsRfc3339 = year >= 0 && year <= 9999;
         const fraction = ((ns % billion + billion) % billion).toString().padStart(9, '0').replace(/0+$/, '');
         const isoFraction = fraction.padEnd(3, '0');
         const iso = date.toISOString().slice(0, -5) + '.' + isoFraction + 'Z';
@@ -1990,8 +1993,8 @@
             { label: '本地时间', value: humanDate(date, false, fraction) + '  ' + offset },
             { label: 'UTC 时间', value: humanDate(date, true, fraction) + '  UTC' },
             { label: 'ISO 8601', value: iso },
-            { label: 'RFC 2822', value: date.toUTCString().replace('GMT', '+0000') },
-            { label: 'RFC 3339', value: iso.replace(/Z$/, '+00:00') }
+            { label: 'RFC 2822', value: supportsRfc2822 ? date.toUTCString().replace('GMT', '+0000') : '不适用：年份须不早于 1900', copyable: supportsRfc2822 },
+            { label: 'RFC 3339', value: supportsRfc3339 ? iso.replace(/Z$/, '+00:00') : '不适用：年份须为 0000–9999', copyable: supportsRfc3339 }
           ],
           timestamps: ['s', 'ms', 'us', 'ns'].map((unit) => ({ label: 'Unix ' + unitNames[unit], note: unit, value: epochString(ns, unit) }))
         };
@@ -2056,6 +2059,7 @@
           }
           const entry = getRowEntry(i);
           entry.tr.hidden = false;
+          entry.button.disabled = row.copyable === false;
           if (entry.label !== row.label) {
             setText(entry.labelSpan, row.label);
             const copyLabel = '复制' + row.label;
@@ -2108,7 +2112,7 @@
 
       els.resultsBody.addEventListener('click', (event) => {
         const button = event.target.closest('.row-copy');
-        if (!button || !currentResult) return;
+        if (!button || button.disabled || !currentResult) return;
         const row = currentResult[resultTab][Number(button.dataset.rowIndex)];
         if (row) copyText(row.value, row.label + '已复制', button);
       }, { passive: true });
@@ -2132,8 +2136,9 @@
 
       els.copyAll.addEventListener('click', () => {
         if (!currentResult) return;
-        const text = [...currentResult.dates, ...currentResult.timestamps].map((row) => row.label + ': ' + row.value).join('\n');
-        copyText(text, '全部 9 种格式已复制', els.copyAll);
+        const rows = [...currentResult.dates, ...currentResult.timestamps].filter((row) => row.copyable !== false);
+        const text = rows.map((row) => row.label + ': ' + row.value).join('\n');
+        copyText(text, '全部 ' + rows.length + ' 种格式已复制', els.copyAll);
       }, { passive: true });
 
       function showResult(ns, tab, description) {
