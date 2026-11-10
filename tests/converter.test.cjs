@@ -150,3 +150,27 @@ for (const [iso, expectedCount] of [
     assert.equal(copied.source, button);
   });
 }
+
+test('result tab arrow keys leave modified shortcuts to the browser', () => {
+  const handlers = {};
+  const tab = { dataset: { resultTab: 'dates' }, addEventListener(type, handler) { handlers[type] = handler; } };
+  let focused = 0;
+  const context = vm.createContext({
+    resultTab: 'dates',
+    els: { resultTabs: [tab], tabTimestamps: { focus() { focused += 1; } } },
+    renderResults() {}
+  });
+  vm.runInContext(section('\n      els.resultTabs.forEach(', "      els.copyAll.addEventListener('click'"), context);
+  const press = (modifiers) => {
+    let prevented = false;
+    handlers.keydown({ key: 'ArrowRight', ...modifiers, preventDefault() { prevented = true; } });
+    return prevented;
+  };
+  for (const modifier of ['altKey', 'ctrlKey', 'metaKey']) {
+    assert.equal(press({ [modifier]: true }), false);
+    assert.equal(context.resultTab, 'dates');
+  }
+  assert.equal(press({}), true);
+  assert.equal(context.resultTab, 'timestamps');
+  assert.equal(focused, 1);
+});

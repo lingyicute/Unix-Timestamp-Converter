@@ -2124,6 +2124,8 @@
           renderResults(true);
         }, { passive: true });
         button.addEventListener('keydown', (event) => {
+          // 带修饰键的组合留给浏览器（如 Alt+←/→ 前进后退、Ctrl+Home/End 滚动到页首页尾）
+          if (event.altKey || event.ctrlKey || event.metaKey) return;
           if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
           event.preventDefault();
           const nextTab = event.key === 'Home' ? 'dates' : event.key === 'End' ? 'timestamps' : resultTab === 'dates' ? 'timestamps' : 'dates';
