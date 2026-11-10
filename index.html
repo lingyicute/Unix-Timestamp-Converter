@@ -191,7 +191,7 @@
     }
     button, input, select { font: inherit; }
     button { cursor: pointer; border: 0; background: transparent; -webkit-tap-highlight-color: transparent; }
-    button:focus-visible, a:focus-visible, select:focus-visible, summary:focus-visible {
+    button:focus-visible, a:focus-visible, select:focus-visible {
       outline: 3px solid var(--primary);
       outline-offset: 4px;
     }
@@ -521,7 +521,8 @@
     .select-wrap .icon {
       position: absolute;
       right: 11px;
-      top: 11px;
+      top: 50%;
+      transform: translateY(-50%);
       width: 14px;
       height: 14px;
       color: var(--secondary-text);
@@ -603,7 +604,6 @@
     /* Results */
     .results-section { margin-top: 32px; animation: rise-in 0.6s 0.23s backwards; }
     .results-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 15px; }
-    .result-title-row { display: flex; gap: 12px; align-items: center; }
     .results-heading h2 { font-size: 19px; font-weight: 600; margin: 0; }
     .result-source { color: var(--muted); font-size: 11px; margin: 4px 0 0; min-height: 17px; }
     .results-controls { display: flex; align-items: center; gap: 15px; }
@@ -1441,6 +1441,10 @@
         cancelAnimationFrame(metaFrame);
         metaFrame = 0;
         if (vtBusy) return; // 揭示结束后统一同步
+        if (doc.hidden) {
+          syncMetaTheme();
+          return;
+        }
         metaFrame = requestAnimationFrame(syncMetaTheme);
       }
 
@@ -1672,6 +1676,7 @@
               panel.removeEventListener('animationend', settingsAnimEnd);
               settingsAnimEnd = null;
             }
+            if (!returnFocus && panel.contains(doc.activeElement)) doc.activeElement.blur();
             panel.classList.remove('is-closing');
             panel.hidden = true;
             if (returnFocus) els.paletteButton.focus({ preventScroll: true });
@@ -1829,8 +1834,8 @@
           els.liveUnitButtons.forEach((item) => item.setAttribute('aria-pressed', String(item === button)));
           syncSeg(button.parentElement);
           els.liveValue.classList.toggle('is-milliseconds', liveUnit === 'ms');
-          renderLive();
-          if (!livePaused) scheduleLive();
+          if (livePaused || doc.hidden || !liveVisible) renderLive();
+          else scheduleLive();
         }, { passive: true });
       });
 
@@ -1889,8 +1894,11 @@
           try {
             copied = doc.execCommand('copy');
           } catch (_) {}
+          field.blur();
           field.value = '';
-          if (previousFocus && previousFocus.focus) previousFocus.focus({ preventScroll: true });
+          if (previousFocus && previousFocus !== doc.body && previousFocus.isConnected && typeof previousFocus.focus === 'function') {
+            previousFocus.focus({ preventScroll: true });
+          }
         }
 
         if (copied) {
@@ -2394,6 +2402,7 @@
       els.guide.addEventListener('close', () => {
         guideGen += 1;
         guideClosing = false;
+        guideBackdropDown = false;
         els.guide.classList.remove('is-closing');
         clearTimeout(guideCloseTimer);
         if (guideAnimEnd) {
@@ -2410,8 +2419,9 @@
         guideBackdropDown = event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom;
       }, { passive: true });
       els.guide.addEventListener('click', (event) => {
-        if (!guideBackdropDown || event.target !== els.guide) return;
+        const fromBackdrop = guideBackdropDown;
         guideBackdropDown = false;
+        if (!fromBackdrop || event.target !== els.guide) return;
         const rect = els.guide.getBoundingClientRect();
         if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) closeGuide();
       });
