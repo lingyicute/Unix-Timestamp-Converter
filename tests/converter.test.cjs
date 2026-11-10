@@ -174,3 +174,22 @@ test('result tab arrow keys leave modified shortcuts to the browser', () => {
   assert.equal(context.resultTab, 'timestamps');
   assert.equal(focused, 1);
 });
+
+test('timestamp hint only promises auto-detection while it is selected', () => {
+  const classList = { remove() {} };
+  const els = {
+    timestampUnit: { value: 'auto' }, timestampMessage: { classList }, timestampField: { classList },
+    timestampInput: { value: '', setAttribute() {} }, clearTimestamp: {}
+  };
+  const context = vm.createContext({
+    els, timestampHint: '自动识别', unitNames: { ms: '毫秒' },
+    setText(el, text) { el.textContent = text; }
+  });
+  vm.runInContext(section('      function clearTimestampError(', "      els.timestampInput.addEventListener('input'"), context);
+  vm.runInContext('clearTimestampError()', context);
+  assert.equal(els.timestampMessage.textContent, '自动识别');
+  els.timestampUnit.value = 'ms';
+  vm.runInContext('clearTimestampError()', context);
+  assert.match(els.timestampMessage.textContent, /毫秒/);
+  assert.doesNotMatch(els.timestampMessage.textContent, /自动识别/);
+});

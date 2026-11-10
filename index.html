@@ -2159,7 +2159,9 @@
 
       /* ---------- 时间戳表单 ---------- */
       function clearTimestampError() {
-        setText(els.timestampMessage, timestampHint); // 每次按键都会走这里，内容没变时不碰 DOM
+        const unit = els.timestampUnit.value;
+        // 每次按键都会走这里，内容没变时不碰 DOM；手动指定单位后不再声称“自动识别”
+        setText(els.timestampMessage, unit === 'auto' ? timestampHint : '按' + unitNames[unit] + '解析，支持负数。');
         els.timestampMessage.classList.remove('is-error');
         els.timestampField.classList.remove('is-invalid');
         els.timestampInput.setAttribute('aria-invalid', 'false');
