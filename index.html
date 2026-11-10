@@ -1110,7 +1110,7 @@
         </div>
         <div class="live-actions">
           <button type="button" class="copy-live ripple-target" id="copy-live" aria-label="复制当前时间戳"><svg class="icon" aria-hidden="true"><use href="#i-copy"/></svg><span>复制时间戳</span></button>
-          <button type="button" class="icon-button pause-button" id="pause-live" aria-label="暂停实时更新" title="暂停实时更新" aria-pressed="false"><svg class="icon" aria-hidden="true"><use href="#i-pause"/></svg></button>
+          <button type="button" class="icon-button pause-button" id="pause-live" aria-label="暂停实时更新" title="暂停实时更新"><svg class="icon" aria-hidden="true"><use href="#i-pause"/></svg></button>
         </div>
       </div>
     </section>
@@ -1846,7 +1846,6 @@
         }
         livePaused = !livePaused;
         const label = livePaused ? '继续实时更新' : '暂停实时更新';
-        els.pauseLive.setAttribute('aria-pressed', String(livePaused));
         els.pauseLive.setAttribute('aria-label', label);
         els.pauseLive.title = label;
         els.pauseLiveUse.setAttribute('href', livePaused ? '#i-play' : '#i-pause');
