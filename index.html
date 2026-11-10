@@ -713,6 +713,8 @@
     }
     .footer-brand { display: inline-flex; gap: 8px; align-items: center; }
     .footer-brand .icon { width: 14px; height: 14px; color: var(--primary); }
+    .footer-brand a { color: inherit; text-decoration: none; border-radius: 4px; }
+    .footer-brand a:hover { color: var(--primary); }
     .footer-right { display: flex; gap: 16px; align-items: center; }
     .privacy-label { display: inline-flex; align-items: center; gap: 5px; }
     .privacy-label .icon { width: 12px; height: 12px; }
@@ -1191,7 +1193,7 @@
     </section>
 
     <footer class="site-footer">
-      <span class="footer-brand"><svg class="icon" aria-hidden="true"><use href="#i-clock"/></svg>晓刻 · Made with ❤️ by <a href="https://github.com/lingyicute" target="_blank" rel="noopener noreferrer">lingyicute</a></span>
+      <span class="footer-brand"><svg class="icon" aria-hidden="true"><use href="#i-clock"/></svg><span>晓刻 · Made with ❤️ by <a href="https://github.com/lingyicute" target="_blank" rel="noopener noreferrer">lingyicute</a></span></span>
       <div class="footer-right"><span class="privacy-label"><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg>本地运算，数据不上传</span><button class="footer-link" id="footer-guide" type="button">使用指南</button></div>
     </footer>
   </main>
@@ -1333,6 +1335,7 @@
       const segGroups = Array.from(doc.querySelectorAll('.seg'));
       const segMeasured = new WeakSet();
       const segRects = new WeakMap();
+      const segFrames = new WeakMap();
       // 读写分离：先对所有分组统一测量（只读，至多触发一次布局），再统一写入。
       // 原先逐组“读 offset → 写样式 → 读下一组 offset”，每组写入都会让下一组的读取重新强制布局。
       function measureSeg(group) {
@@ -1358,8 +1361,17 @@
         group.classList.add('seg-ready');
         if (first) {
           segMeasured.add(group);
+          const pending = segFrames.get(group);
+          if (pending) cancelAnimationFrame(pending);
           // 首次定位不做动画，下一帧后才开启过渡，避免指示器从左上角“飞入”
-          requestAnimationFrame(() => requestAnimationFrame(() => group.classList.add('seg-animate')));
+          const f1 = requestAnimationFrame(() => {
+            const f2 = requestAnimationFrame(() => {
+              segFrames.delete(group);
+              group.classList.add('seg-animate');
+            });
+            segFrames.set(group, f2);
+          });
+          segFrames.set(group, f1);
         }
       }
       function syncSegs(groups) {
@@ -1535,17 +1547,30 @@
 
       function withThemeTransition(update, originEl, originEvent) {
         const token = ++vtToken;
+        const wasBusy = vtBusy;
         if (vtGuard) { clearTimeout(vtGuard); vtGuard = 0; }
-        if (reduceMotion.matches) {
-          if (vtBusy) {
+        if (themeAnimTimer) {
+          clearTimeout(themeAnimTimer);
+          themeAnimTimer = null;
+          root.classList.remove('theme-animating');
+        }
+        if (els.settingsPanel.classList.contains('is-closing')) {
+          setSettings(false, false, true);
+        }
+        if (reduceMotion.matches || doc.hidden) {
+          if (wasBusy) {
             vtBusy = false;
             root.classList.remove('vt-running');
           }
           update();
+          if (wasBusy) {
+            syncMetaTheme();
+            renderLive(true);
+          }
           return;
         }
         // 优先：View Transitions 圆形揭示，从真实点击位置向外扩散
-        if (typeof doc.startViewTransition === 'function' && !doc.hidden) {
+        if (typeof doc.startViewTransition === 'function') {
           vtGeometry = revealGeometry(originEvent, originEl);
           // 必须在旧快照捕获之前写入几何变量与 vt-running 类：
           // 保证旧快照捕获时呼吸灯已冻结、新快照捕获时内部子元素不触发延迟过渡
@@ -1561,11 +1586,16 @@
           if (transition) {
             vtGuard = setTimeout(() => endThemeTransition(token), VT_DURATION + 1100);
             if (transition.ready && typeof transition.ready.then === 'function') {
-              transition.ready.then(ensureRevealAnimation).catch(() => {});
+              transition.ready.then(() => {
+                if (token === vtToken && vtBusy) ensureRevealAnimation();
+              }).catch(() => {});
             }
             transition.finished.catch(() => {}).then(() => endThemeTransition(token));
             return;
           }
+          vtBusy = false;
+          root.classList.remove('vt-running');
+        } else if (wasBusy) {
           vtBusy = false;
           root.classList.remove('vt-running');
         }
@@ -1574,8 +1604,11 @@
         root.classList.add('theme-animating');
         void root.offsetWidth;
         update();
-        clearTimeout(themeAnimTimer);
-        themeAnimTimer = setTimeout(() => root.classList.remove('theme-animating'), 450);
+        if (wasBusy) renderLive(true);
+        themeAnimTimer = setTimeout(() => {
+          themeAnimTimer = null;
+          root.classList.remove('theme-animating');
+        }, 450);
       }
 
       els.themeToggle.addEventListener('click', (event) => {
@@ -1609,7 +1642,7 @@
       let settingsCloseTimer = null;
       let settingsAnimEnd = null;
       let settingsGen = 0;
-      function setSettings(open, returnFocus = false) {
+      function setSettings(open, returnFocus = false, immediate = false) {
         const panel = els.settingsPanel;
         if (open) {
           if (!panel.hidden && !panel.classList.contains('is-closing')) return;
@@ -1628,19 +1661,30 @@
             syncSeg(els.modeGroup);
           }
           const active = panel.querySelector('.color-choice[aria-pressed="true"]');
-          if (active) active.focus();
+          if (active) active.focus({ preventScroll: true });
         } else {
-          if (panel.hidden || panel.classList.contains('is-closing')) return;
+          if (panel.hidden) return;
           els.paletteButton.setAttribute('aria-expanded', 'false');
-          if (reduceMotion.matches) {
-            if (returnFocus || panel.contains(doc.activeElement)) els.paletteButton.focus();
+          if (immediate || reduceMotion.matches) {
+            settingsGen += 1;
+            clearTimeout(settingsCloseTimer);
+            if (settingsAnimEnd) {
+              panel.removeEventListener('animationend', settingsAnimEnd);
+              settingsAnimEnd = null;
+            }
+            panel.classList.remove('is-closing');
             panel.hidden = true;
+            if (returnFocus) els.paletteButton.focus({ preventScroll: true });
+            return;
+          }
+          if (panel.classList.contains('is-closing')) {
+            if (returnFocus) els.paletteButton.focus({ preventScroll: true });
             return;
           }
           settingsGen += 1;
           const ticket = settingsGen;
           panel.classList.add('is-closing');
-          if (returnFocus) els.paletteButton.focus();
+          if (returnFocus) els.paletteButton.focus({ preventScroll: true });
           clearTimeout(settingsCloseTimer);
           if (settingsAnimEnd) panel.removeEventListener('animationend', settingsAnimEnd);
           let done = false;
@@ -1650,7 +1694,7 @@
             if (done || ticket !== settingsGen) return;
             if (!panel.classList.contains('is-closing')) return;
             done = true;
-            if (panel.contains(doc.activeElement)) els.paletteButton.focus();
+            if (panel.contains(doc.activeElement)) doc.activeElement.blur();
             panel.hidden = true;
             panel.classList.remove('is-closing');
           };
@@ -1665,7 +1709,7 @@
 
       els.paletteButton.addEventListener('click', () => {
         const shouldOpen = els.settingsPanel.hidden || els.settingsPanel.classList.contains('is-closing');
-        setSettings(shouldOpen);
+        setSettings(shouldOpen, !shouldOpen);
       }, { passive: true });
 
       doc.addEventListener('pointerdown', (event) => {
@@ -1704,15 +1748,23 @@
         return 'UTC' + (totalSeconds >= 0 ? '+' : '-') + hours + ':' + minutes + (seconds ? ':' + pad(seconds) : '');
       }
       function dateParts(date, utc = false) {
-        const prefix = utc ? 'getUTC' : 'get';
-        return {
-          year: date[prefix + 'FullYear'](),
-          month: date[prefix + 'Month']() + 1,
-          day: date[prefix + 'Date'](),
-          hour: date[prefix + 'Hours'](),
-          minute: date[prefix + 'Minutes'](),
-          second: date[prefix + 'Seconds']()
-        };
+        return utc
+          ? {
+              year: date.getUTCFullYear(),
+              month: date.getUTCMonth() + 1,
+              day: date.getUTCDate(),
+              hour: date.getUTCHours(),
+              minute: date.getUTCMinutes(),
+              second: date.getUTCSeconds()
+            }
+          : {
+              year: date.getFullYear(),
+              month: date.getMonth() + 1,
+              day: date.getDate(),
+              hour: date.getHours(),
+              minute: date.getMinutes(),
+              second: date.getSeconds()
+            };
       }
       function humanDate(date, utc = false, fraction = '') {
         const p = dateParts(date, utc);
@@ -1777,8 +1829,8 @@
           els.liveUnitButtons.forEach((item) => item.setAttribute('aria-pressed', String(item === button)));
           syncSeg(button.parentElement);
           els.liveValue.classList.toggle('is-milliseconds', liveUnit === 'ms');
-          if (livePaused) renderLive();
-          else scheduleLive();
+          renderLive();
+          if (!livePaused) scheduleLive();
         }, { passive: true });
       });
 
@@ -1804,16 +1856,22 @@
 
       /* ---------- 复制优化：复用离屏 textarea ---------- */
       function resetCopyButton(button) {
-        const timer = copyTimers.get(button);
-        if (!timer) return;
-        clearTimeout(timer);
+        const state = copyTimers.get(button);
+        if (!state) return;
+        if (state.timer) clearTimeout(state.timer);
         copyTimers.delete(button);
-        const use = button.querySelector('use');
-        if (use) use.setAttribute('href', '#i-copy');
+        if (state.use) state.use.setAttribute('href', '#i-copy');
         button.classList.remove('is-copied');
       }
 
       async function copyText(text, message = '已复制到剪贴板', button = null) {
+        let state = null;
+        if (button) {
+          const prev = copyTimers.get(button);
+          if (prev && prev.timer) clearTimeout(prev.timer);
+          state = { timer: 0, use: prev ? prev.use : button.querySelector('use') };
+          copyTimers.set(button, state);
+        }
         let copied = false;
         try {
           if (navigator.clipboard && window.isSecureContext) {
@@ -1837,18 +1895,17 @@
 
         if (copied) {
           showToast(message);
-          if (button && button.isConnected) {
-            clearTimeout(copyTimers.get(button));
-            const use = button.querySelector('use');
-            if (use) use.setAttribute('href', '#i-check');
+          if (button && state && copyTimers.get(button) === state && button.isConnected) {
+            if (state.use) state.use.setAttribute('href', '#i-check');
             button.classList.add('is-copied');
-            copyTimers.set(button, setTimeout(() => {
-              if (use) use.setAttribute('href', '#i-copy');
+            state.timer = setTimeout(() => {
+              if (state.use) state.use.setAttribute('href', '#i-copy');
               button.classList.remove('is-copied');
               copyTimers.delete(button);
-            }, 1600));
+            }, 1600);
           }
         } else {
+          if (button && state && copyTimers.get(button) === state) resetCopyButton(button);
           showToast('浏览器未允许复制，请选中结果手动复制。', false);
         }
       }
@@ -1954,11 +2011,15 @@
         const labelTd = doc.createElement('td');
         const labelText = doc.createTextNode('');
         const noteSpan = doc.createElement('span');
+        const noteText = doc.createTextNode('');
         noteSpan.className = 'format-note';
         noteSpan.hidden = true;
+        noteSpan.appendChild(noteText);
         labelTd.append(labelText, noteSpan);
         const valueTd = doc.createElement('td');
+        const valueText = doc.createTextNode('');
         valueTd.className = 'result-value';
+        valueTd.appendChild(valueText);
         const actionTd = doc.createElement('td');
         const button = doc.createElement('button');
         button.type = 'button';
@@ -1968,7 +2029,7 @@
         actionTd.appendChild(button);
         tr.append(labelTd, valueTd, actionTd);
         els.resultsBody.appendChild(tr);
-        entry = { tr, labelText, noteSpan, valueTd, button, label: '', value: '' };
+        entry = { tr, labelText, noteSpan, noteText, valueTd, valueText, button, label: '', note: '', value: '' };
         rowPool[index] = entry;
         return entry;
       }
@@ -1995,15 +2056,15 @@
             entry.button.title = copyLabel;
             entry.label = row.label;
           }
-          if (showNote && row.note) {
-            entry.noteSpan.hidden = false;
-            setText(entry.noteSpan, row.note);
-          } else {
-            entry.noteSpan.hidden = true;
+          const note = showNote && row.note ? row.note : '';
+          if (entry.note !== note) {
+            entry.noteSpan.hidden = !note;
+            if (note) entry.noteText.data = note;
+            entry.note = note;
           }
           if (entry.value !== row.value || lastRenderedTab !== resultTab) {
             resetCopyButton(entry.button);
-            setText(entry.valueTd, row.value);
+            entry.valueText.data = row.value;
             entry.value = row.value;
           }
         }
@@ -2071,12 +2132,13 @@
       function showResult(ns, tab, description) {
         if (!currentResult || currentResult.ns !== ns) {
           currentResult = buildResult(ns);
+          resetCopyButton(els.copyAll);
         }
         resultTab = tab;
         setText(els.resultSource, description);
         renderResults(true);
         const rect = els.resultsSection.getBoundingClientRect();
-        if (rect.top > window.innerHeight - 140) {
+        if (rect.top > window.innerHeight - 140 || rect.bottom < 140) {
           els.resultsSection.scrollIntoView({ behavior: reduceMotion.matches ? 'instant' : 'smooth', block: 'start' });
         }
       }
@@ -2147,7 +2209,9 @@
               const fallback = new Date(0);
               fallback.setHours(12, 0, 0, 0);
               fallback.setFullYear(y, mo - 1, d);
-              if (!Number.isNaN(fallback.getTime())) date = fallback;
+              if (fallback.getFullYear() === y && fallback.getMonth() + 1 === mo && fallback.getDate() === d) {
+                date = fallback;
+              }
             }
           }
         }
@@ -2273,7 +2337,7 @@
       let guideGen = 0;
       let guideBackdropDown = false;
       function openGuide() {
-        setSettings(false);
+        setSettings(false, false, true);
         const g = els.guide;
         if (g.open && !guideClosing) return;
         guideGen += 1;
@@ -2285,7 +2349,6 @@
         guideClosing = false;
         g.classList.remove('is-closing');
         if (!g.open) g.showModal();
-        void g.offsetWidth;
       }
       function closeGuide() {
         const g = els.guide;
@@ -2329,6 +2392,7 @@
         closeGuide();
       });
       els.guide.addEventListener('close', () => {
+        guideGen += 1;
         guideClosing = false;
         els.guide.classList.remove('is-closing');
         clearTimeout(guideCloseTimer);
@@ -2357,18 +2421,20 @@
         if (reduceMotion.matches || button.disabled) return;
         const rect = button.getBoundingClientRect();
         if (!rect.width && !rect.height) return;
-        const size = Math.max(rect.width, rect.height) * 2;
         let x = event ? event.clientX : 0;
         let y = event ? event.clientY : 0;
         if (!Number.isFinite(x) || !Number.isFinite(y) || (x === 0 && y === 0)) {
           x = rect.left + rect.width / 2;
           y = rect.top + rect.height / 2;
         }
+        const localX = Math.min(Math.max(x - rect.left, 0), rect.width);
+        const localY = Math.min(Math.max(y - rect.top, 0), rect.height);
+        const size = Math.hypot(Math.max(localX, rect.width - localX), Math.max(localY, rect.height - localY)) * 2;
         const ripple = doc.createElement('span');
         ripple.className = 'ripple';
         ripple.style.width = ripple.style.height = size + 'px';
-        ripple.style.left = x - rect.left - size / 2 + 'px';
-        ripple.style.top = y - rect.top - size / 2 + 'px';
+        ripple.style.left = localX - size / 2 + 'px';
+        ripple.style.top = localY - size / 2 + 'px';
         button.appendChild(ripple);
         const timer = setTimeout(() => ripple.remove(), 700);
         ripple.addEventListener('animationend', () => {
