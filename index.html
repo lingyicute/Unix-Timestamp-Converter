@@ -1105,7 +1105,7 @@
       </div>
       <div class="live-main">
         <div class="live-content">
-          <div class="live-number" id="live-value" role="timer" aria-live="off" aria-label="当前 Unix 时间戳">0000000000</div>
+          <div class="live-number" id="live-value" role="timer" aria-live="off" aria-label="当前 Unix 时间戳" translate="no">0000000000</div>
           <p class="live-date" id="live-date">正在读取你的本地时间…</p>
         </div>
         <div class="live-actions">
@@ -2026,6 +2026,7 @@
         labelTd.append(labelSpan, noteSpan);
         const valueTd = doc.createElement('td');
         valueTd.className = 'result-value';
+        valueTd.setAttribute('translate', 'no'); // 数字与标准格式串不该被翻译工具改写
         const actionTd = doc.createElement('td');
         const button = doc.createElement('button');
         button.type = 'button';
