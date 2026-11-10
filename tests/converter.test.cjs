@@ -100,11 +100,13 @@ test('copy buttons are disabled for unavailable formats and recover on the next 
   vm.runInContext(section('      function renderResults(', "      els.resultsBody.addEventListener('click'"), context);
   vm.runInContext('renderResults()', context);
   assert.deepEqual(rowPool.map((entry) => entry.button.disabled), [false, false, false, true, true]);
+  assert.deepEqual(rowPool.map((entry) => entry.valueTd.translate), [false, false, false, true, true]);
   assert.match(rowPool[3].valueTd.textContent, /1900/);
   assert.match(rowPool[4].valueTd.textContent, /9999/);
   context.currentResult = buildResult(0n);
   vm.runInContext('renderResults()', context);
   assert.ok(rowPool.every((entry) => entry.button.disabled === false));
+  assert.ok(rowPool.every((entry) => entry.valueTd.translate === false));
 });
 
 test('delegated copy ignores disabled buttons and still copies supported formats', () => {

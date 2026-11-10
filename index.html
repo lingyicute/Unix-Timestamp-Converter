@@ -2060,6 +2060,7 @@
           const entry = getRowEntry(i);
           entry.tr.hidden = false;
           entry.button.disabled = row.copyable === false;
+          entry.valueTd.translate = row.copyable === false; // “不适用”的说明是自然语言，允许翻译；其余仍是不该改写的格式串
           if (entry.label !== row.label) {
             setText(entry.labelSpan, row.label);
             const copyLabel = '复制' + row.label;
