@@ -9,14 +9,20 @@
   <script>
     (() => {
       try {
+        const surfaces = {
+          light: { sage: '#f8faf5', iris: '#faf8fc', blue: '#f6fafb', apricot: '#fcf9f5', rose: '#fcf8f9' },
+          dark: { sage: '#161a15', iris: '#1b181e', blue: '#151b1e', apricot: '#1e1a16', rose: '#1e181b' }
+        };
         const mode = localStorage.getItem('shike-mode') || 'light';
-        const color = localStorage.getItem('shike-color') || 'sage';
-        document.documentElement.dataset.theme = mode === 'system'
+        const rawColor = localStorage.getItem('shike-color') || 'sage';
+        const color = ['sage', 'iris', 'blue', 'apricot', 'rose'].includes(rawColor) ? rawColor : 'sage';
+        const theme = mode === 'system'
           ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
           : (mode === 'dark' ? 'dark' : 'light');
-        if (['sage', 'iris', 'blue', 'apricot', 'rose'].includes(color)) {
-          document.documentElement.dataset.color = color;
-        }
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.dataset.color = color;
+        const meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.content = surfaces[theme][color];
       } catch (_) {}
     })();
   </script>
@@ -294,6 +300,7 @@
 
     /* Main */
     main { padding-top: 32px; }
+    main:focus { outline: none; }
     .intro { animation: rise-in 0.6s 0.02s backwards; }
     .eyebrow { margin: 0 0 7px; color: var(--primary); font-size: 10px; font-weight: 600; letter-spacing: 2.2px; line-height: 1.5; }
     h1 { margin: 0; font-size: clamp(27px, 3vw, 36px); line-height: 1.4; font-weight: 600; letter-spacing: -0.9px; }
@@ -379,7 +386,7 @@
     }
     .seg.seg-ready::before { opacity: 1; }
     .seg.seg-animate::before {
-      transition: transform 0.34s cubic-bezier(0.2, 0, 0, 1), width 0.34s cubic-bezier(0.2, 0, 0, 1), height 0.34s cubic-bezier(0.2, 0, 0, 1), background-color 0.4s ease;
+      transition: transform 0.34s cubic-bezier(0.2, 0, 0, 1), width 0.34s cubic-bezier(0.2, 0, 0, 1), height 0.34s cubic-bezier(0.2, 0, 0, 1);
     }
     .seg.seg-ready > button[aria-pressed="true"],
     .seg.seg-ready > button[aria-selected="true"] { background: transparent; box-shadow: none; }
@@ -564,6 +571,7 @@
 
     .date-fields { display: grid; grid-template-columns: 1.14fr 1fr; gap: 12px; }
     .date-fields input { font-family: var(--sans); font-size: 13px; letter-spacing: 0.1px; padding-right: 14px; }
+    .date-fields input::-webkit-date-and-time-value { text-align: left; }
     .date-fields input::-webkit-calendar-picker-indicator {
       width: 15px;
       height: 15px;
@@ -896,8 +904,11 @@
       ::view-transition-new(root) { animation-duration: 1ms !important; }
     }
 
-    /* 揭示期间冻结持续动画，避免反复弄脏正在被裁剪的新画面图层（冻结在当前帧，不产生跳变） */
+    /* 揭示期间冻结持续动画与子元素过渡，保证新快照首帧即为目标终态且图层不被反复弄脏 */
     html.vt-running .live-dot::before { animation-play-state: paused; }
+    html.vt-running *,
+    html.vt-running *::before,
+    html.vt-running *::after { transition: none !important; }
 
     /* 主题切换兜底：不支持 View Transitions 时，短暂启用全局颜色过渡 */
     html.theme-animating,
@@ -1252,6 +1263,8 @@
         toast: $('toast'),
         toastMessage: $('toast-message'),
         toastIconUse: $('toast').querySelector('use'),
+        themeToggleUse: $('theme-toggle').querySelector('use'),
+        pauseLiveUse: $('pause-live').querySelector('use'),
       };
 
       // 兜底复制用的离屏 textarea：仅在 Clipboard API 不可用时才会用到，
@@ -1287,6 +1300,10 @@
       const million = 1000000n;
       const maxNs = 8640000000000000n * million;
       const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+      const surfaceColors = {
+        light: { sage: '#f8faf5', iris: '#faf8fc', blue: '#f6fafb', apricot: '#fcf9f5', rose: '#fcf8f9' },
+        dark: { sage: '#161a15', iris: '#1b181e', blue: '#151b1e', apricot: '#1e1a16', rose: '#1e181b' }
+      };
 
       let localZone = '本地时区';
       try { localZone = Intl.DateTimeFormat().resolvedOptions().timeZone || localZone; } catch (_) {}
@@ -1315,6 +1332,7 @@
       /* ---------- 分段控件滑动指示器 ---------- */
       const segGroups = Array.from(doc.querySelectorAll('.seg'));
       const segMeasured = new WeakSet();
+      const segRects = new WeakMap();
       // 读写分离：先对所有分组统一测量（只读，至多触发一次布局），再统一写入。
       // 原先逐组“读 offset → 写样式 → 读下一组 offset”，每组写入都会让下一组的读取重新强制布局。
       function measureSeg(group) {
@@ -1328,11 +1346,15 @@
         const group = m.group;
         const first = !segMeasured.has(group);
         if (first) group.classList.remove('seg-animate');
-        const style = group.style;
-        style.setProperty('--seg-x', m.x + 'px');
-        style.setProperty('--seg-y', m.y + 'px');
-        style.setProperty('--seg-w', m.w + 'px');
-        style.setProperty('--seg-h', m.h + 'px');
+        const prev = segRects.get(group);
+        if (first || !prev || prev.x !== m.x || prev.y !== m.y || prev.w !== m.w || prev.h !== m.h) {
+          const style = group.style;
+          style.setProperty('--seg-x', m.x + 'px');
+          style.setProperty('--seg-y', m.y + 'px');
+          style.setProperty('--seg-w', m.w + 'px');
+          style.setProperty('--seg-h', m.h + 'px');
+          segRects.set(group, m);
+        }
         group.classList.add('seg-ready');
         if (first) {
           segMeasured.add(group);
@@ -1383,7 +1405,7 @@
         const label = dark ? '切换到浅色模式' : '切换到深色模式';
         els.themeToggle.setAttribute('aria-label', label);
         els.themeToggle.title = label;
-        els.themeToggle.querySelector('use').setAttribute('href', dark ? '#i-sun' : '#i-moon');
+        els.themeToggleUse.setAttribute('href', dark ? '#i-sun' : '#i-moon');
 
         els.modeButtons.forEach((button) => {
           button.setAttribute('aria-pressed', String(button.dataset.mode === mode));
@@ -1395,17 +1417,18 @@
         scheduleMeta();
       }
 
-      /* 以下三项刻意移出切换的关键路径：
-         - theme-color 的 getComputedStyle 会强制样式重算
-         - localStorage 写入是同步磁盘 I/O
-         它们若发生在新旧画面截图阶段，会直接拖慢扩散动画的第一帧。 */
+      /* 以下操作移出切换的关键路径：
+         - theme-color 直接从颜色表查表，不调用 getComputedStyle 触发样式重算
+         - localStorage 写入是同步磁盘 I/O，延迟批量落盘
+         避免在新旧画面截图阶段阻塞扩散动画的第一帧。 */
       let metaFrame = 0;
       function syncMetaTheme() {
-        if (els.themeMeta) els.themeMeta.content = getComputedStyle(root).getPropertyValue('--surface').trim();
+        if (els.themeMeta) els.themeMeta.content = surfaceColors[isDarkMode() ? 'dark' : 'light'][color];
       }
       function scheduleMeta() {
-        if (vtBusy) return; // 揭示结束后统一同步
         cancelAnimationFrame(metaFrame);
+        metaFrame = 0;
+        if (vtBusy) return; // 揭示结束后统一同步
         metaFrame = requestAnimationFrame(syncMetaTheme);
       }
 
@@ -1511,16 +1534,24 @@
       }
 
       function withThemeTransition(update, originEl, originEvent) {
+        const token = ++vtToken;
+        if (vtGuard) { clearTimeout(vtGuard); vtGuard = 0; }
         if (reduceMotion.matches) {
+          if (vtBusy) {
+            vtBusy = false;
+            root.classList.remove('vt-running');
+          }
           update();
           return;
         }
         // 优先：View Transitions 圆形揭示，从真实点击位置向外扩散
         if (typeof doc.startViewTransition === 'function' && !doc.hidden) {
           vtGeometry = revealGeometry(originEvent, originEl);
-          // 必须在旧快照捕获之前写入：伪元素动画启动那一刻就要读到正确的 --vt-x/--vt-y/--vt-r
+          // 必须在旧快照捕获之前写入几何变量与 vt-running 类：
+          // 保证旧快照捕获时呼吸灯已冻结、新快照捕获时内部子元素不触发延迟过渡
           writeGeometry(vtGeometry);
-          const token = ++vtToken;
+          vtBusy = true;
+          root.classList.add('vt-running');
           let transition = null;
           try {
             transition = doc.startViewTransition(update);
@@ -1528,9 +1559,6 @@
             transition = null;
           }
           if (transition) {
-            vtBusy = true;
-            root.classList.add('vt-running');
-            clearTimeout(vtGuard);
             vtGuard = setTimeout(() => endThemeTransition(token), VT_DURATION + 1100);
             if (transition.ready && typeof transition.ready.then === 'function') {
               transition.ready.then(ensureRevealAnimation).catch(() => {});
@@ -1538,6 +1566,8 @@
             transition.finished.catch(() => {}).then(() => endThemeTransition(token));
             return;
           }
+          vtBusy = false;
+          root.classList.remove('vt-running');
         }
         // 兜底：短暂开启全局颜色过渡
         vtGeometry = null;
@@ -1577,6 +1607,7 @@
       });
 
       let settingsCloseTimer = null;
+      let settingsAnimEnd = null;
       let settingsGen = 0;
       function setSettings(open, returnFocus = false) {
         const panel = els.settingsPanel;
@@ -1585,42 +1616,48 @@
           const wasHidden = panel.hidden;
           settingsGen += 1;
           clearTimeout(settingsCloseTimer);
+          if (settingsAnimEnd) {
+            panel.removeEventListener('animationend', settingsAnimEnd);
+            settingsAnimEnd = null;
+          }
           panel.classList.remove('is-closing');
           panel.hidden = false;
           els.paletteButton.setAttribute('aria-expanded', 'true');
           if (wasHidden && els.modeGroup) {
-            els.modeGroup.classList.remove('seg-animate');
+            segMeasured.delete(els.modeGroup);
             syncSeg(els.modeGroup);
-            requestAnimationFrame(() => requestAnimationFrame(() => els.modeGroup.classList.add('seg-animate')));
           }
-          void panel.offsetWidth;
           const active = panel.querySelector('.color-choice[aria-pressed="true"]');
           if (active) active.focus();
         } else {
           if (panel.hidden || panel.classList.contains('is-closing')) return;
           els.paletteButton.setAttribute('aria-expanded', 'false');
           if (reduceMotion.matches) {
+            if (returnFocus || panel.contains(doc.activeElement)) els.paletteButton.focus();
             panel.hidden = true;
-            if (returnFocus) els.paletteButton.focus();
             return;
           }
           settingsGen += 1;
           const ticket = settingsGen;
           panel.classList.add('is-closing');
+          if (returnFocus) els.paletteButton.focus();
           clearTimeout(settingsCloseTimer);
+          if (settingsAnimEnd) panel.removeEventListener('animationend', settingsAnimEnd);
           let done = false;
-          const onAnimEnd = (event) => {
-            if (event.target === panel) finish();
-          };
           const finish = () => {
             panel.removeEventListener('animationend', onAnimEnd);
+            if (settingsAnimEnd === onAnimEnd) settingsAnimEnd = null;
             if (done || ticket !== settingsGen) return;
             if (!panel.classList.contains('is-closing')) return;
             done = true;
+            if (panel.contains(doc.activeElement)) els.paletteButton.focus();
             panel.hidden = true;
             panel.classList.remove('is-closing');
-            if (returnFocus) els.paletteButton.focus();
           };
+          const onAnimEnd = (event) => {
+            if (event.target === panel) finish();
+          };
+          settingsAnimEnd = onAnimEnd;
           panel.addEventListener('animationend', onAnimEnd);
           settingsCloseTimer = setTimeout(finish, 220);
         }
@@ -1638,7 +1675,7 @@
       }, { passive: true });
 
       doc.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape' && !els.settingsPanel.hidden) {
+        if (event.key === 'Escape' && !els.settingsPanel.hidden && !els.settingsPanel.classList.contains('is-closing')) {
           event.preventDefault();
           setSettings(false, true);
         }
@@ -1698,12 +1735,13 @@
         if (liveUnit === 'ms') {
           liveTimer = setInterval(() => renderLive(), 100);
         } else {
+          // 预留 2ms 余量，避免定时器因系统时钟抖动在 .999s 提前触发导致每秒唤醒两次
           const tickSecond = () => {
             renderLive();
             if (livePaused || doc.hidden || !liveVisible || liveUnit !== 's') return;
-            liveTimer = setTimeout(tickSecond, 1000 - (Date.now() % 1000));
+            liveTimer = setTimeout(tickSecond, 1002 - (Date.now() % 1000));
           };
-          liveTimer = setTimeout(tickSecond, 1000 - (Date.now() % 1000));
+          liveTimer = setTimeout(tickSecond, 1002 - (Date.now() % 1000));
         }
       }
       if ('IntersectionObserver' in window) {
@@ -1745,14 +1783,18 @@
       });
 
       els.pauseLive.addEventListener('click', () => {
+        if (!livePaused) {
+          liveNow = Date.now();
+          renderLive();
+        }
         livePaused = !livePaused;
         const label = livePaused ? '继续实时更新' : '暂停实时更新';
         els.pauseLive.setAttribute('aria-pressed', String(livePaused));
         els.pauseLive.setAttribute('aria-label', label);
         els.pauseLive.title = label;
-        els.pauseLive.querySelector('use').setAttribute('href', livePaused ? '#i-play' : '#i-pause');
+        els.pauseLiveUse.setAttribute('href', livePaused ? '#i-play' : '#i-pause');
         els.livePanel.dataset.paused = String(livePaused);
-        els.liveStatus.textContent = livePaused ? '已暂停' : '实时更新中';
+        setText(els.liveStatus, livePaused ? '已暂停' : '实时更新中');
         scheduleLive();
       }, { passive: true });
 
@@ -1761,6 +1803,16 @@
       scheduleLive();
 
       /* ---------- 复制优化：复用离屏 textarea ---------- */
+      function resetCopyButton(button) {
+        const timer = copyTimers.get(button);
+        if (!timer) return;
+        clearTimeout(timer);
+        copyTimers.delete(button);
+        const use = button.querySelector('use');
+        if (use) use.setAttribute('href', '#i-copy');
+        button.classList.remove('is-copied');
+      }
+
       async function copyText(text, message = '已复制到剪贴板', button = null) {
         let copied = false;
         try {
@@ -1779,6 +1831,7 @@
           try {
             copied = doc.execCommand('copy');
           } catch (_) {}
+          field.value = '';
           if (previousFocus && previousFocus.focus) previousFocus.focus({ preventScroll: true });
         }
 
@@ -1802,7 +1855,7 @@
 
       function showToast(message, success = true) {
         clearTimeout(toastTimer);
-        els.toastMessage.textContent = message;
+        setText(els.toastMessage, message);
         els.toastIconUse.setAttribute('href', success ? '#i-check' : '#i-info');
         els.toast.classList.add('show');
         toastTimer = setTimeout(() => els.toast.classList.remove('show'), 2600);
@@ -1831,8 +1884,16 @@
         if (remainder !== 0n) value += '.' + remainder.toString().padStart(power, '0').replace(/0+$/, '');
         return (negative ? '-' : '') + value;
       }
+      function normalizeNumericInput(raw) {
+        return raw
+          .trim()
+          .replace(/[\uFF10-\uFF19]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0))
+          .replace(/[\u2212\u2013\uFF0D]/g, '-')
+          .replace(/\uFF0B/g, '+')
+          .replace(/[\uFF0E\u3002]/g, '.');
+      }
       function parseTimestamp(raw, selectedUnit) {
-        const value = raw.trim();
+        const value = normalizeNumericInput(raw);
         if (!value) throw new Error('请输入一个 Unix 时间戳。');
         if (value.length > 64 || !/^[+-]?\d+(?:\.\d+)?$/.test(value)) {
           throw new Error('请输入有效数字，可带小数或负号，不支持科学计数法。');
@@ -1844,7 +1905,7 @@
         let unit = selectedUnit;
         if (unit === 'auto') unit = digits <= 10 ? 's' : digits <= 13 ? 'ms' : digits <= 16 ? 'us' : 'ns';
         const power = unitPowers[unit];
-        if (fractional.slice(power).replace(/0/g, '')) throw new Error('小数精度超出纳秒，请减少小数位数。');
+        if (/[^0]/.test(fractional.slice(power))) throw new Error('小数精度超出纳秒，请减少小数位数。');
         const fraction = fractional.slice(0, power).padEnd(power, '0');
         let ns = BigInt(integer) * unitFactors[unit] + BigInt(fraction || '0');
         if (negative) ns = -ns;
@@ -1856,7 +1917,7 @@
         const date = new Date(Number(floorDivide(ns, million)));
         const fraction = ((ns % billion + billion) % billion).toString().padStart(9, '0').replace(/0+$/, '');
         const isoFraction = fraction.padEnd(3, '0');
-        const iso = date.toISOString().split('.')[0] + '.' + isoFraction + 'Z';
+        const iso = date.toISOString().slice(0, -5) + '.' + isoFraction + 'Z';
         const offset = offsetString(date);
         return {
           ns,
@@ -1881,50 +1942,86 @@
         return svg;
       }
 
+      // 复用结果行 DOM 节点池（至多 5 行），避免每次转换或切换标签时销毁并重建 35+ 个 DOM/SVG 节点
+      const rowPool = [];
+      let lastRenderedTab = '';
       let refreshAnimation = null;
+
+      function getRowEntry(index) {
+        let entry = rowPool[index];
+        if (entry) return entry;
+        const tr = doc.createElement('tr');
+        const labelTd = doc.createElement('td');
+        const labelText = doc.createTextNode('');
+        const noteSpan = doc.createElement('span');
+        noteSpan.className = 'format-note';
+        noteSpan.hidden = true;
+        labelTd.append(labelText, noteSpan);
+        const valueTd = doc.createElement('td');
+        valueTd.className = 'result-value';
+        const actionTd = doc.createElement('td');
+        const button = doc.createElement('button');
+        button.type = 'button';
+        button.className = 'icon-button row-copy';
+        button.dataset.rowIndex = String(index);
+        button.appendChild(makeIcon('copy'));
+        actionTd.appendChild(button);
+        tr.append(labelTd, valueTd, actionTd);
+        els.resultsBody.appendChild(tr);
+        entry = { tr, labelText, noteSpan, valueTd, button, label: '', value: '' };
+        rowPool[index] = entry;
+        return entry;
+      }
+
       function renderResults(animate = false) {
         if (!currentResult) return;
         const body = els.resultsBody;
-        body.replaceChildren();
         const rows = currentResult[resultTab];
-        const fragment = doc.createDocumentFragment();
-        rows.forEach((row, index) => {
-          const tr = doc.createElement('tr');
-          const label = doc.createElement('td');
-          label.textContent = row.label;
-          if (row.note && resultTab === 'timestamps') {
-            const note = doc.createElement('span');
-            note.className = 'format-note';
-            note.textContent = row.note;
-            label.appendChild(note);
+        const showNote = resultTab === 'timestamps';
+        const total = Math.max(rows.length, rowPool.length);
+        for (let i = 0; i < total; i++) {
+          const row = rows[i];
+          if (!row) {
+            rowPool[i].tr.hidden = true;
+            resetCopyButton(rowPool[i].button);
+            continue;
           }
-          const value = doc.createElement('td');
-          value.className = 'result-value';
-          value.textContent = row.value;
-          const action = doc.createElement('td');
-          const button = doc.createElement('button');
-          button.type = 'button';
-          button.className = 'icon-button row-copy';
-          button.dataset.rowIndex = String(index);
-          button.setAttribute('aria-label', '复制' + row.label);
-          button.title = '复制' + row.label;
-          button.appendChild(makeIcon('copy'));
-          action.appendChild(button);
-          tr.append(label, value, action);
-          fragment.appendChild(tr);
-        });
-        body.appendChild(fragment);
+          const entry = getRowEntry(i);
+          entry.tr.hidden = false;
+          if (entry.label !== row.label) {
+            entry.labelText.data = row.label;
+            const copyLabel = '复制' + row.label;
+            entry.button.setAttribute('aria-label', copyLabel);
+            entry.button.title = copyLabel;
+            entry.label = row.label;
+          }
+          if (showNote && row.note) {
+            entry.noteSpan.hidden = false;
+            setText(entry.noteSpan, row.note);
+          } else {
+            entry.noteSpan.hidden = true;
+          }
+          if (entry.value !== row.value || lastRenderedTab !== resultTab) {
+            resetCopyButton(entry.button);
+            setText(entry.valueTd, row.value);
+            entry.value = row.value;
+          }
+        }
 
-        els.resultTabs.forEach((button) => {
-          const active = button.dataset.resultTab === resultTab;
-          button.setAttribute('aria-selected', String(active));
-          button.tabIndex = active ? 0 : -1;
-        });
-        if (els.resultTabs[0]) syncSeg(els.resultTabs[0].parentElement);
-        els.resultsPanel.setAttribute('aria-labelledby', resultTab === 'dates' ? 'tab-dates' : 'tab-timestamps');
-        setText(els.resultFootnote, resultTab === 'dates'
-          ? 'Unix 时间戳不受时区影响。本地时间根据你的设备时区显示。'
-          : '各单位均保留原始精度。微秒与纳秒使用 BigInt 计算，不丢失大整数精度。');
+        if (lastRenderedTab !== resultTab) {
+          const isInitial = !lastRenderedTab;
+          lastRenderedTab = resultTab;
+          els.resultTabs.forEach((button) => {
+            const active = button.dataset.resultTab === resultTab;
+            button.setAttribute('aria-selected', String(active));
+            button.tabIndex = active ? 0 : -1;
+          });
+          if (!isInitial && els.resultTabs[0]) syncSeg(els.resultTabs[0].parentElement);
+          els.resultsPanel.setAttribute('aria-labelledby', resultTab === 'dates' ? 'tab-dates' : 'tab-timestamps');
+          setText(els.resultFootnote, resultTab === 'dates'
+            ? 'Unix 时间戳不受时区影响。本地时间根据你的设备时区显示。'
+            : '各单位均保留原始精度。微秒与纳秒使用 BigInt 计算，不丢失大整数精度。');
+        }
 
         // 刷新动画改用 Web Animations：关键帧、时长、缓动与原 CSS 动画（0.45s ease）完全一致，
         // 但不再需要“移除 class → 读 offsetWidth 强制回流 → 加回 class”这套技巧，
@@ -1972,7 +2069,9 @@
       }, { passive: true });
 
       function showResult(ns, tab, description) {
-        currentResult = buildResult(ns);
+        if (!currentResult || currentResult.ns !== ns) {
+          currentResult = buildResult(ns);
+        }
         resultTab = tab;
         setText(els.resultSource, description);
         renderResults(true);
@@ -2020,7 +2119,7 @@
           const identified = els.timestampUnit.value === 'auto' ? '自动识别为' : '输入单位：';
           showResult(parsed.ns, 'dates', '来自时间戳 · ' + identified + unitNames[parsed.unit]);
         } catch (error) {
-          els.timestampMessage.textContent = error.message;
+          setText(els.timestampMessage, error.message);
           els.timestampMessage.classList.add('is-error');
           els.timestampField.classList.add('is-invalid');
           els.timestampInput.setAttribute('aria-invalid', 'true');
@@ -2029,11 +2128,32 @@
       });
 
       /* ---------- 日期表单 ---------- */
+      let lastHintKey = '';
+      let lastHintText = '';
       function dateHint() {
         if (selectedZone === 'utc') return '协调世界时 · UTC+00:00';
-        let date = new Date();
-        try { date = parseDateObject(); } catch (_) {}
-        return '本地时区 · ' + localZone + ' · ' + offsetString(date);
+        const dateVal = els.dateInput.value;
+        const timeVal = els.timeInput.value;
+        const key = `${dateVal}|${timeVal}`;
+        if (key === lastHintKey && lastHintText) return lastHintText;
+        let date = null;
+        try {
+          date = parseDateObject();
+        } catch (_) {
+          const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateVal);
+          if (m) {
+            const [, y, mo, d] = m.map(Number);
+            if (y >= 1 && y <= 9999 && mo >= 1 && mo <= 12 && d >= 1 && d <= 31) {
+              const fallback = new Date(0);
+              fallback.setHours(12, 0, 0, 0);
+              fallback.setFullYear(y, mo - 1, d);
+              if (!Number.isNaN(fallback.getTime())) date = fallback;
+            }
+          }
+        }
+        lastHintKey = key;
+        lastHintText = '本地时区 · ' + localZone + ' · ' + offsetString(date || new Date());
+        return lastHintText;
       }
 
       function clearDateError() {
@@ -2111,8 +2231,11 @@
         date.setFullYear(y, mo - 1, d);
         date.setHours(hour, minute, second, 0);
         const p = dateParts(date, false);
-        if (p.year !== y || p.month !== mo || p.day !== d || p.hour !== hour || p.minute !== minute || p.second !== second) {
+        if (p.hour !== hour || p.minute !== minute || p.second !== second) {
           throw { message: '该时间处于夏令时跳转区间，请选择其他时间或 UTC。', field: 'time' };
+        }
+        if (p.year !== y || p.month !== mo || p.day !== d) {
+          throw { message: '该日期处于本地时区跳转区间，请选择其他日期或 UTC。', field: 'date' };
         }
         return date;
       }
@@ -2132,7 +2255,7 @@
           els.timeField.classList.remove('is-invalid');
           els.dateInput.setAttribute('aria-invalid', 'false');
           els.timeInput.setAttribute('aria-invalid', 'false');
-          els.dateMessage.textContent = error.message || '无法转换，请检查输入的日期与时间。';
+          setText(els.dateMessage, error.message || '无法转换，请检查输入的日期与时间。');
           els.dateMessage.classList.add('is-error');
           const isTime = error.field === 'time';
           const fieldEl = isTime ? els.timeField : els.dateField;
@@ -2146,17 +2269,22 @@
       /* ---------- 指南对话框（含对称的打开 / 关闭动画） ---------- */
       let guideClosing = false;
       let guideCloseTimer = null;
+      let guideAnimEnd = null;
       let guideGen = 0;
       let guideBackdropDown = false;
       function openGuide() {
         setSettings(false);
         const g = els.guide;
-        if (g.open) return;
+        if (g.open && !guideClosing) return;
         guideGen += 1;
         clearTimeout(guideCloseTimer);
+        if (guideAnimEnd) {
+          g.removeEventListener('animationend', guideAnimEnd);
+          guideAnimEnd = null;
+        }
         guideClosing = false;
         g.classList.remove('is-closing');
-        g.showModal();
+        if (!g.open) g.showModal();
         void g.offsetWidth;
       }
       function closeGuide() {
@@ -2171,12 +2299,11 @@
         guideClosing = true;
         g.classList.add('is-closing');
         clearTimeout(guideCloseTimer);
+        if (guideAnimEnd) g.removeEventListener('animationend', guideAnimEnd);
         let done = false;
-        const onAnimEnd = (event) => {
-          if (event.target === g) finish();
-        };
         const finish = () => {
           g.removeEventListener('animationend', onAnimEnd);
+          if (guideAnimEnd === onAnimEnd) guideAnimEnd = null;
           if (done || ticket !== guideGen) return;
           if (!g.classList.contains('is-closing')) return;
           done = true;
@@ -2184,6 +2311,10 @@
           g.classList.remove('is-closing');
           if (g.open) g.close();
         };
+        const onAnimEnd = (event) => {
+          if (event.target === g) finish();
+        };
+        guideAnimEnd = onAnimEnd;
         g.addEventListener('animationend', onAnimEnd);
         guideCloseTimer = setTimeout(finish, 240);
       }
@@ -2201,9 +2332,13 @@
         guideClosing = false;
         els.guide.classList.remove('is-closing');
         clearTimeout(guideCloseTimer);
+        if (guideAnimEnd) {
+          els.guide.removeEventListener('animationend', guideAnimEnd);
+          guideAnimEnd = null;
+        }
       });
       els.guide.addEventListener('pointerdown', (event) => {
-        if (event.target !== els.guide) {
+        if (event.button !== 0 || event.target !== els.guide) {
           guideBackdropDown = false;
           return;
         }
@@ -2218,29 +2353,36 @@
       });
 
       /* ---------- 轻量 ripple（同样不依赖固定坐标，键盘触发时回落到元素中心） ---------- */
+      function spawnRipple(button, event) {
+        if (reduceMotion.matches || button.disabled) return;
+        const rect = button.getBoundingClientRect();
+        if (!rect.width && !rect.height) return;
+        const size = Math.max(rect.width, rect.height) * 2;
+        let x = event ? event.clientX : 0;
+        let y = event ? event.clientY : 0;
+        if (!Number.isFinite(x) || !Number.isFinite(y) || (x === 0 && y === 0)) {
+          x = rect.left + rect.width / 2;
+          y = rect.top + rect.height / 2;
+        }
+        const ripple = doc.createElement('span');
+        ripple.className = 'ripple';
+        ripple.style.width = ripple.style.height = size + 'px';
+        ripple.style.left = x - rect.left - size / 2 + 'px';
+        ripple.style.top = y - rect.top - size / 2 + 'px';
+        button.appendChild(ripple);
+        const timer = setTimeout(() => ripple.remove(), 700);
+        ripple.addEventListener('animationend', () => {
+          clearTimeout(timer);
+          ripple.remove();
+        }, { once: true });
+      }
       doc.querySelectorAll('.ripple-target').forEach((button) => {
         button.addEventListener('pointerdown', (event) => {
-          if (reduceMotion.matches || event.button > 0 || button.disabled) return;
-          const rect = button.getBoundingClientRect();
-          if (!rect.width && !rect.height) return;
-          const size = Math.max(rect.width, rect.height) * 2;
-          let x = event.clientX;
-          let y = event.clientY;
-          if (!Number.isFinite(x) || !Number.isFinite(y) || (x === 0 && y === 0)) {
-            x = rect.left + rect.width / 2;
-            y = rect.top + rect.height / 2;
-          }
-          const ripple = doc.createElement('span');
-          ripple.className = 'ripple';
-          ripple.style.width = ripple.style.height = size + 'px';
-          ripple.style.left = x - rect.left - size / 2 + 'px';
-          ripple.style.top = y - rect.top - size / 2 + 'px';
-          button.appendChild(ripple);
-          const timer = setTimeout(() => ripple.remove(), 700);
-          ripple.addEventListener('animationend', () => {
-            clearTimeout(timer);
-            ripple.remove();
-          }, { once: true });
+          if (event.button > 0) return;
+          spawnRipple(button, event);
+        }, { passive: true });
+        button.addEventListener('click', (event) => {
+          if (event.detail === 0) spawnRipple(button, event);
         }, { passive: true });
       });
 
@@ -2248,11 +2390,7 @@
       updateTheme();
       fillTimestamp(liveNow);
       fillDate(liveNow);
-      try {
-        currentResult = buildResult(parseTimestamp(els.timestampInput.value, 's').ns);
-      } catch (_) {
-        currentResult = buildResult(BigInt(Math.floor(liveNow / 1000)) * billion);
-      }
+      currentResult = buildResult(BigInt(Math.floor(liveNow / 1000)) * billion);
       renderResults();
       syncAllSegs();
     })();
