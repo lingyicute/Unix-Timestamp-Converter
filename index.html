@@ -1322,6 +1322,7 @@
       let selectedZone = 'local';
       let resultTab = 'dates';
       let currentResult = null;
+      let currentResultOffset = null;
       let toastTimer;
       const copyTimers = new WeakMap();
       const timestampHint = '自动识别秒、毫秒、微秒和纳秒，支持负数。';
@@ -2151,8 +2152,10 @@
       }, { passive: true });
 
       function showResult(ns, tab, description) {
-        if (!currentResult || currentResult.ns !== ns) {
+        const resultOffset = new Date(Number(floorDivide(ns, million))).getTimezoneOffset();
+        if (!currentResult || currentResult.ns !== ns || currentResultOffset !== resultOffset) {
           currentResult = buildResult(ns);
+          currentResultOffset = resultOffset;
           resetCopyButton(els.copyAll);
         }
         resultTab = tab;

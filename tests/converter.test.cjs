@@ -15,11 +15,11 @@ function section(start, end) {
 }
 
 // Exercise the shipped inline functions without exporting a browser-only test API.
-const { parseTimestamp, epochString, buildResult, maxNs } = vm.runInNewContext([
+const { parseTimestamp, epochString, buildResult, floorDivide, maxNs } = vm.runInNewContext([
   section('      const unitNames =', '      const weekdays ='),
   section('      const pad =', '      /* ---------- 实时计时器'),
   section('      function floorDivide(', '      function makeIcon('),
-  '({ parseTimestamp, epochString, buildResult, maxNs })'
+  '({ parseTimestamp, epochString, buildResult, floorDivide, maxNs })'
 ].join('\n'));
 
 const resultAt = (iso) => buildResult(BigInt(new Date(iso).getTime()) * 1000000n);
@@ -228,4 +228,44 @@ test('a stale clipboard failure cannot replace newer copy feedback', async () =>
 
   assert.equal(fallbacks, 0);
   assert.deepEqual(messages, [{ message: '新内容已复制', success: true }]);
+});
+
+test('the same instant is rebuilt after the system timezone changes', () => {
+  const previousZone = process.env.TZ;
+  let builds = 0;
+  const context = vm.createContext({
+    currentResult: null,
+    currentResultOffset: null,
+    resultTab: 'dates',
+    floorDivide,
+    million: 1000000n,
+    buildResult(ns) { builds += 1; return buildResult(ns); },
+    resetCopyButton() {},
+    setText() {},
+    renderResults() {},
+    els: {
+      copyAll: {},
+      resultSource: {},
+      resultsSection: { getBoundingClientRect() { return { top: 200, bottom: 500 }; } }
+    },
+    window: { innerHeight: 800 }
+  });
+  vm.runInContext(section('      function showResult(', '      /* ---------- 时间戳表单'), context);
+
+  try {
+    process.env.TZ = 'UTC';
+    vm.runInContext("showResult(0n, 'dates', 'first')", context);
+    assert.equal(rowOf(context.currentResult, '本地时间').value, '1970-01-01 00:00:00  UTC+00:00');
+
+    vm.runInContext("showResult(0n, 'dates', 'cached')", context);
+    assert.equal(builds, 1);
+
+    process.env.TZ = 'America/New_York';
+    vm.runInContext("showResult(0n, 'dates', 'new timezone')", context);
+    assert.equal(builds, 2);
+    assert.equal(rowOf(context.currentResult, '本地时间').value, '1969-12-31 19:00:00  UTC-05:00');
+  } finally {
+    if (previousZone === undefined) delete process.env.TZ;
+    else process.env.TZ = previousZone;
+  }
 });
