@@ -195,3 +195,37 @@ test('timestamp hint only promises auto-detection while it is selected', () => {
   assert.match(els.timestampMessage.textContent, /毫秒/);
   assert.doesNotMatch(els.timestampMessage.textContent, /自动识别/);
 });
+
+test('a stale clipboard failure cannot replace newer copy feedback', async () => {
+  const pending = {};
+  const messages = [];
+  const classList = { add() {}, remove() {} };
+  const use = { setAttribute() {} };
+  const button = { classList, isConnected: true, querySelector() { return use; } };
+  const field = { value: '', select() {}, setSelectionRange() {}, blur() {} };
+  let fallbacks = 0;
+  const context = vm.createContext({
+    copyOperation: 0,
+    copyTimers: new WeakMap(),
+    navigator: { clipboard: { writeText(text) {
+      return new Promise((resolve, reject) => { pending[text] = { resolve, reject }; });
+    } } },
+    window: { isSecureContext: true },
+    doc: { activeElement: null, body: {}, execCommand() { return false; } },
+    getHiddenCopy() { fallbacks += 1; return field; },
+    clearTimeout() {},
+    setTimeout() { return 1; },
+    showToast(message, success = true) { messages.push({ message, success }); }
+  });
+  vm.runInContext(section('      function resetCopyButton(', '      function showToast('), context);
+
+  const oldCopy = context.copyText('old', '旧内容已复制', button);
+  const newCopy = context.copyText('new', '新内容已复制', button);
+  pending.new.resolve();
+  await newCopy;
+  pending.old.reject(new Error('permission revoked'));
+  await oldCopy;
+
+  assert.equal(fallbacks, 0);
+  assert.deepEqual(messages, [{ message: '新内容已复制', success: true }]);
+});

@@ -1858,6 +1858,7 @@
       scheduleLive();
 
       /* ---------- 复制优化：复用离屏 textarea ---------- */
+      let copyOperation = 0;
       function resetCopyButton(button) {
         const state = copyTimers.get(button);
         if (!state) return;
@@ -1868,6 +1869,7 @@
       }
 
       async function copyText(text, message = '已复制到剪贴板', button = null) {
+        const operation = ++copyOperation;
         let state = null;
         if (button) {
           const prev = copyTimers.get(button);
@@ -1882,6 +1884,12 @@
             copied = true;
           }
         } catch (_) {}
+
+        // 较新的复制已接管反馈；旧请求不再启动兜底复制或覆盖提示。
+        if (operation !== copyOperation) {
+          if (button && state && copyTimers.get(button) === state) resetCopyButton(button);
+          return;
+        }
 
         if (!copied) {
           const previousFocus = doc.activeElement;
